@@ -1,5 +1,4 @@
 // App State
-
 const API_BASE = "/api";
 
 // App State
@@ -7,6 +6,7 @@ let leads = [];
 let filteredLeads = [];
 let users = [];
 let editingLeadId = null;
+let currentUser = window.currentUser; // Use the current user from window
 
 // Pipeline stages configuration
 const stages = [
@@ -26,6 +26,7 @@ async function init() {
   updateStats();
   setupEventListeners();
 }
+
 async function fetchLeads() {
   try {
     const params = new URLSearchParams();
@@ -68,13 +69,16 @@ async function fetchLeads() {
     console.error("Error fetching leads:", error);
   }
 }
+
 // Populate user dropdowns
 function populateUserDropdowns() {
   const userFilter = document.getElementById("userFilter");
   const assignedUserSelect = document.getElementById("assignedUser");
+
   // Clear existing options except the first one
   userFilter.innerHTML = '<option value="">All Users</option>';
   assignedUserSelect.innerHTML = '<option value="">Select user</option>';
+
   // Add user options
   users.forEach((user) => {
     if (user.name !== "Admin") {
@@ -105,6 +109,7 @@ function applyFilters() {
 
     // User filter
     const matchesUser = !userFilter || lead.assignedUserId == userFilter;
+
     // Follow-up filter
     let matchesFollowup = true;
     if (followupFilter) {
@@ -404,12 +409,10 @@ function updateStats() {
 // Drag and Drop handlers
 let draggedLeadId = null;
 let isDragging = false;
-let dragStartTime = 0;
 
 function handleDragStart(e, leadId) {
   draggedLeadId = leadId;
   isDragging = true;
-  dragStartTime = Date.now();
   e.target.classList.add("dragging");
   e.dataTransfer.effectAllowed = "move";
   e.dataTransfer.setData("text/html", e.target.innerHTML);
@@ -419,9 +422,8 @@ function handleDragEnd(e) {
   e.target.classList.remove("dragging");
   // Only reset isDragging if enough time has passed (to prevent click right after drag)
   setTimeout(() => {
-    if (Date.now() - dragStartTime > 100) {
-      isDragging = false;
-    }
+    isDragging = false;
+    draggedLeadId = null;
   }, 50);
 }
 
@@ -437,9 +439,9 @@ function handleDragLeave(e) {
 async function handleDrop(e, stageId) {
   e.preventDefault();
   e.currentTarget.classList.remove("drag-over");
-
-  if (draggedLeadId) {
-    const lead = leads.find((l) => l.id === draggedLeadId);
+  const leadId = draggedLeadId;
+  if (leadId) {
+    const lead = leads.find((l) => l.id === leadId);
     if (lead) {
       const updatedData = {
         contactName: lead.contactName,
@@ -453,27 +455,33 @@ async function handleDrop(e, stageId) {
         stage: stageId,
       };
 
-      editingLeadId = draggedLeadId;
+      editingLeadId = leadId;
       await saveLead(updatedData);
       editingLeadId = null;
     }
   }
-
+  isDragging = false;
   draggedLeadId = null;
 }
 
 // Modal functions
-
 function openModal(leadId = null) {
   const modal = document.getElementById("leadModal");
   const modalTitle = modal.querySelector(".modal-title");
   const submitBtn = document.getElementById("submitBtn");
   const deleteBtn = document.getElementById("deleteBtn");
   const timelineSection = document.getElementById("timelineSection");
+  const assignedUserGroup = document
+    .getElementById("assignedUser")
+    .closest(".form-group");
+  const assignedUserSelect = document.getElementById("assignedUser");
 
   if (!modal || !modalTitle || !submitBtn) {
     return;
   }
+
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === "admin";
 
   if (leadId) {
     // Edit mode
@@ -484,10 +492,25 @@ function openModal(leadId = null) {
       submitBtn.textContent = "Update Lead";
       if (deleteBtn) deleteBtn.style.display = "block";
       if (timelineSection) timelineSection.style.display = "block";
+
+      // Show/hide assigned user based on admin status
+      if (assignedUserGroup) {
+        if (isAdmin) {
+          assignedUserGroup.style.display = "block";
+          assignedUserSelect.disabled = false;
+        } else {
+          assignedUserGroup.style.display = "none";
+          assignedUserSelect.disabled = true;
+        }
+      }
+
       if (lead.assignedUserId) {
         const assignedUser = users.find((u) => u.id === lead.assignedUserId);
-        document.getElementById("assignedUser").value = assignedUser.id;
+        if (assignedUser) {
+          document.getElementById("assignedUser").value = assignedUser.id;
+        }
       }
+
       // Populate form with existing data
       document.getElementById("contactName").value = lead.contactName;
       document.getElementById("company").value = lead.company || "";
@@ -507,7 +530,26 @@ function openModal(leadId = null) {
     submitBtn.textContent = "Add Lead";
     if (deleteBtn) deleteBtn.style.display = "none";
     if (timelineSection) timelineSection.style.display = "none";
+
+    // Show/hide assigned user based on admin status
+    if (assignedUserGroup) {
+      if (isAdmin) {
+        assignedUserGroup.style.display = "block";
+        assignedUserSelect.disabled = false;
+        // Set default to current user for admin
+        assignedUserSelect.value = currentUser.id;
+      } else {
+        assignedUserGroup.style.display = "none";
+        assignedUserSelect.disabled = true;
+      }
+    }
+
     document.getElementById("leadForm").reset();
+
+    // If admin, set default assigned user to current user
+    if (isAdmin) {
+      assignedUserSelect.value = currentUser.id;
+    }
   }
 
   // Hide activity form
@@ -534,8 +576,36 @@ function editLead(leadId) {
 document.getElementById("leadForm").addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const assignedUserId = document.getElementById("assignedUser").value;
-  const assignedUser = users.find((u) => u.id == assignedUserId);
+  let assignedUserId;
+  let assignedUser;
+
+  const isAdmin = currentUser?.role === "admin";
+
+  if (editingLeadId) {
+    // For editing
+    if (isAdmin) {
+      // Admin can change assigned user
+      assignedUserId = document.getElementById("assignedUser").value;
+      assignedUser = users.find((u) => u.id == assignedUserId);
+    } else {
+      // Non-admin keeps existing assignment
+      const existingLead = leads.find((l) => l.id === editingLeadId);
+      assignedUserId = existingLead?.assignedUserId;
+      assignedUser = users.find((u) => u.id == assignedUserId);
+    }
+  } else {
+    // For new leads
+    if (isAdmin) {
+      // Admin can select user (or defaults to current user)
+      assignedUserId =
+        document.getElementById("assignedUser").value || currentUser.id;
+      assignedUser = users.find((u) => u.id == assignedUserId) || currentUser;
+    } else {
+      // Non-admin gets auto-assigned to current user
+      assignedUserId = currentUser?.id;
+      assignedUser = currentUser;
+    }
+  }
 
   const leadData = {
     contactName: document.getElementById("contactName").value,
@@ -575,7 +645,6 @@ async function saveLead(leadData) {
       notes: leadData.notes,
       stage: leadData.stage,
     };
-
     if (editingLeadId) {
       await fetch(`${API_BASE}/leads/${editingLeadId}`, {
         method: "PUT",
@@ -624,14 +693,11 @@ async function addActivity() {
     return;
   }
 
-  const lead = leads.find((l) => l.id === editingLeadId);
-  const assignedUser = users.find((u) => u.name === lead?.assignedUser);
-
   const activityData = {
     type,
     date: date || new Date().toISOString(),
     description,
-    userId: assignedUser?.id || null,
+    userId: currentUser?.id || null,
   };
 
   await saveActivity(editingLeadId, activityData);
@@ -659,12 +725,30 @@ async function saveActivity(leadId, activityData) {
     alert("Error saving activity. Please try again.");
   }
 }
+
+// Add this helper somewhere above saveLead
+async function addInitialActivity(leadId) {
+  const apiData = {
+    type: "note",
+    description: "Lead created",
+    activity_date: new Date().toISOString(),
+    user_id: currentUser?.id || null,
+  };
+
+  await fetch(`${API_BASE}/leads/${leadId}/activities`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(apiData),
+  });
+}
+
 async function deleteLead() {
   if (editingLeadId && confirm("Are you sure you want to delete this lead?")) {
     await removeLeadFromDB(editingLeadId);
     closeModal();
   }
 }
+
 // Setup event listeners
 function setupEventListeners() {
   // Filter event listeners
@@ -700,7 +784,6 @@ function setupEventListeners() {
     }
   });
 }
-// Add user info to the global scope
 
 // Initialize the app
 init();

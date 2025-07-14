@@ -9,7 +9,6 @@ import apiRoutes from "./routes/api.js";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
 import { requireAuthWeb } from "./middleware/auth.js";
-import User from "./models/User.js";
 const __dirname = path.resolve();
 dotenv.config();
 
