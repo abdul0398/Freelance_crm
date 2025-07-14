@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel - Freelance CRM</title>
+    <link rel="stylesheet" href="/css/admin.css" />
+  </head>
+  <body>
+    <div class="admin-container">
+      <header class="admin-header">
+        <div class="header-left">
+          <h1>Admin Panel</h1>
+          <span class="user-info">Welcome, <%= user.name %></span>
+        </div>
+        <div class="header-right">
+          <a href="/" class="btn btn-secondary">Back to CRM</a>
+          <form action="/logout" method="POST" style="display: inline">
+            <button type="submit" class="btn btn-danger">Logout</button>
+          </form>
+        </div>
+      </header>
+
+      <main class="admin-content">
+        <div class="section">
+          <div class="section-header">
+            <h2>User Management</h2>
+            <button class="btn btn-primary" onclick="openUserModal()">
+              Add User
+            </button>
+          </div>
+          <div class="users-table">
+            <table id="usersTable">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <!-- Users will be loaded here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- User Modal -->
+    <div class="modal" id="userModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modalTitle">Add User</h3>
+          <button class="close-btn" onclick="closeUserModal()">&times;</button>
+        </div>
+        <form id="userForm">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="userName" required />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="userEmail" required />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="userPassword" required />
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              onclick="closeUserModal()"
+            >
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/js/admin.js"></script>
+  </body>
+</html>

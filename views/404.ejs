@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 Not Found - Freelance CRM</title>
+    <style>
+      /* Reset default styles */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .container {
+        max-width: 800px;
+        width: 100%;
+        padding: 20px;
+      }
+
+      .card {
+        background-color: #fff;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        padding: 40px;
+        text-align: center;
+      }
+
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .logo svg {
+        width: 40px;
+        height: 40px;
+      }
+
+      .logo span {
+        font-size: 24px;
+        font-weight: bold;
+      }
+
+      .tagline {
+        font-size: 16px;
+        color: #666;
+        margin-bottom: 40px;
+      }
+
+      .error-message {
+        text-align: center;
+      }
+
+      .error-message h2 {
+        font-size: 24px;
+        margin-bottom: 10px;
+      }
+
+      .error-message p {
+        font-size: 16px;
+        color: #666;
+        margin-bottom: 20px;
+      }
+
+      .button {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #5c6af7;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: transform 0.3s;
+      }
+
+      .button:hover {
+        transform: scale(1.1);
+      }
+      .logo-icon {
+        width: 40px;
+        height: 40px;
+        stroke: var(--primary);
+        fill: none;
+        animation: pulse 2s infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24">
+            <path
+              stroke="currentColor"
+              stroke-width="2"
+              d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
+            />
+          </svg>
+          <span>Freelance CRM</span>
+        </div>
+        <p class="tagline">Manage your leads with ease</p>
+        <div class="error-message">
+          <h2>Oops! Page not found.</h2>
+          <p>The page you are looking for does not exist or has been moved.</p>
+          <a href="/dashboard" class="button">Go Back Home</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
