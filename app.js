@@ -85,7 +85,6 @@ app.use("*", (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on port ${PORT}`);
-  console.log(`Visit http://localhost:${PORT} to access the CRM`);
 });
