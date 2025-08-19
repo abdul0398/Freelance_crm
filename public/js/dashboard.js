@@ -529,7 +529,7 @@ function openModal(leadId = null) {
     modalTitle.textContent = "Add New Lead";
     submitBtn.textContent = "Add Lead";
     if (deleteBtn) deleteBtn.style.display = "none";
-    if (timelineSection) timelineSection.style.display = "none";
+    if (timelineSection) timelineSection.style.display = "block";
 
     // Show/hide assigned user based on admin status
     if (assignedUserGroup) {
@@ -620,6 +620,20 @@ document.getElementById("leadForm").addEventListener("submit", async (e) => {
       : "cold",
   };
 
+  // --- NEW: bundle activity if user filled it out ---
+  const activityType = document.getElementById("activityType").value;
+  const activityDate = document.getElementById("activityDate").value;
+  const activityDescription = document
+    .getElementById("activityDescription")
+    .value.trim();
+  if (activityType) {
+    leadData.activity = {
+      type: activityType,
+      date: activityDate || new Date().toISOString(), // fallback to now
+      description: activityDescription,
+      userId: currentUser?.id || null,
+    };
+  }
   await saveLead(leadData);
 });
 
@@ -644,20 +658,25 @@ async function saveLead(leadData) {
       followup_date: leadData.followupDate,
       notes: leadData.notes,
       stage: leadData.stage,
+      ...(leadData.activity && {
+        activity: {
+          type: leadData.activity.type,
+          description: leadData.activity.description,
+          activity_date: leadData.activity.date,
+          user_id: leadData.activity.userId,
+        },
+      }),
     };
-    if (editingLeadId) {
-      await fetch(`${API_BASE}/leads/${editingLeadId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiData),
-      });
-    } else {
-      await fetch(`${API_BASE}/leads`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiData),
-      });
-    }
+    const url = editingLeadId
+      ? `${API_BASE}/leads/${editingLeadId}`
+      : `${API_BASE}/leads`;
+    const method = editingLeadId ? "PUT" : "POST";
+
+    await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(apiData),
+    });
 
     await fetchLeads();
     closeModal();

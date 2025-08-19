@@ -70,10 +70,11 @@ router.get("/leads/:id", async (req, res) => {
 
 router.post("/leads", async (req, res) => {
   try {
+    console.log(req.body);
     const leadId = await Lead.create(req.body, req.user.user_id);
     const lead = await Lead.getById(leadId, req.user.role, req.user.user_id);
     console.log(leadId, lead);
-    res.status(201).json(lead);
+    res.status(201).json("");
   } catch (error) {
     console.error("Error creating lead:", error);
     res.status(500).json({ error: "Failed to create lead" });

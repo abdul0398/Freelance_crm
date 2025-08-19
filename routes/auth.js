@@ -18,26 +18,25 @@ router.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.render("login", {
+      return res.render("auth/login", {
         error: "Please provide both username and password",
       });
     }
     const authResult = await User.authenticate(username, password);
-    console.log(authResult, "sdsffsdf");
-
     if (!authResult) {
-      return res.render("login", { error: "Invalid username or password" });
+      return res.render("auth/login", {
+        error: "Invalid username or password",
+      });
     }
 
     // Store user info in session
-    req.session.userId = authResult.user.id;
-    req.session.user = authResult.user;
-    req.session.sessionId = authResult.sessionId;
+    req.session.userId = authResult.id;
+    req.session.user = authResult;
 
     res.redirect("/");
   } catch (error) {
     console.error("Login error:", error);
-    res.render("login", { error: "An error occurred during login" });
+    res.render("auth/login", { error: "An error occurred during login" });
   }
 });
 
