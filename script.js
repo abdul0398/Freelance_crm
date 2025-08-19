@@ -19,7 +19,7 @@ const db = mysql.createPool(dbConfig);
 async function modifyDatabase() {
   try {
     const [rows] = await db.query(
-      "SELECT * FROM leads WHERE assigned_user_id != 6 AND created_by != 6 AND deleted_at IS NULL"
+      "SELECT * FROM leads WHERE assigned_user_id != 6 AND deleted_at IS NULL"
     );
     console.log(`Processing ${rows.length} leads...`);
 
