@@ -92,7 +92,8 @@ async function checkForCompanyInNotes(notes) {
     return result === "yes";
   } catch (error) {
     console.error("Error analyzing notes with OpenAI:", error);
-    return false;
+    console.log("AI API failed - skipping deletion to be safe");
+    return true; // Return true to prevent deletion when AI API fails
   }
 }
 

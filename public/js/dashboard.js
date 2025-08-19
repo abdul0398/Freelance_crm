@@ -7,6 +7,7 @@ let filteredLeads = [];
 let users = [];
 let editingLeadId = null;
 let currentUser = window.currentUser; // Use the current user from window
+let isLoading = false;
 
 // Pipeline stages configuration
 const stages = [
@@ -29,6 +30,7 @@ async function init() {
 
 async function fetchLeads() {
   try {
+    setLoading(true);
     const params = new URLSearchParams();
 
     // Add filters
@@ -67,6 +69,8 @@ async function fetchLeads() {
     updateStats();
   } catch (error) {
     console.error("Error fetching leads:", error);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -804,5 +808,29 @@ function setupEventListeners() {
   });
 }
 
+// Loading functions
+function setLoading(loading) {
+  isLoading = loading;
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) {
+    overlay.style.display = loading ? 'flex' : 'none';
+  }
+}
+
+function createLoadingOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'loadingOverlay';
+  overlay.innerHTML = `
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading leads...</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
 // Initialize the app
-init();
+window.addEventListener('DOMContentLoaded', () => {
+  createLoadingOverlay();
+  init();
+});
