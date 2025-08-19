@@ -1,4 +1,6 @@
 import db from "../config/database.js";
+import { categorizeLead } from "../services/leadCategorizer.js";
+
 export default class Lead {
   static async getAll(filters = {}, userRole = "user", userId = null) {
     let query = `
@@ -118,6 +120,22 @@ export default class Lead {
       stage = "cold",
     } = leadData;
 
+    let finalAssignedUserId = assigned_user_id;
+
+    // If created by user 6, categorize the lead and auto-assign
+    if (createdBy === 6) {
+      try {
+        const categorization = await categorizeLead(notes);
+        if (categorization && categorization.assignedUserId) {
+          finalAssignedUserId = categorization.assignedUserId;
+          console.log(`Lead categorized as "${categorization.category}" and assigned to user ${finalAssignedUserId}`);
+        }
+      } catch (error) {
+        console.error("Error categorizing lead:", error);
+        // Continue with original assignment if categorization fails
+      }
+    }
+
     const [result] = await db.execute(
       `
       INSERT INTO leads (
@@ -130,7 +148,7 @@ export default class Lead {
         company,
         platform,
         deal_value || 0,
-        assigned_user_id || null,
+        finalAssignedUserId || null,
         followup_date || null,
         notes,
         stage,
