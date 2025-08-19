@@ -19,7 +19,7 @@ export default class Lead {
       FROM leads l
       LEFT JOIN users u ON l.assigned_user_id = u.id
       LEFT JOIN users creator ON l.created_by = creator.id
-      WHERE 1=1
+      WHERE l.deleted_at IS NULL
     `;
 
     const params = [];
@@ -91,7 +91,7 @@ export default class Lead {
       FROM leads l
       LEFT JOIN users u ON l.assigned_user_id = u.id
       LEFT JOIN users creator ON l.created_by = creator.id
-      WHERE l.id = ?
+      WHERE l.id = ? AND l.deleted_at IS NULL
     `;
 
     const params = [id];
@@ -164,7 +164,7 @@ export default class Lead {
         notes = ?,
         stage = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      WHERE id = ? AND deleted_at IS NULL
     `;
 
     const params = [
@@ -195,7 +195,7 @@ export default class Lead {
   }
 
   static async delete(id, userRole = "user", userId = null) {
-    let query = "DELETE FROM leads WHERE id = ?";
+    let query = "UPDATE leads SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL";
     const params = [id];
 
     // Role-based filtering
@@ -218,30 +218,24 @@ export default class Lead {
     }
 
     const [totalResult] = await db.execute(
-      `SELECT COUNT(*) as total FROM leads ${whereClause}`,
+      `SELECT COUNT(*) as total FROM leads ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'}`,
       params
     );
     const [wonResult] = await db.execute(
-      `SELECT COUNT(*) as won FROM leads ${whereClause} ${
-        whereClause ? "AND" : "WHERE"
-      } stage = "won"`,
-      [...params, ...(whereClause ? ["won"] : [])]
+      `SELECT COUNT(*) as won FROM leads ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'} AND stage = ?`,
+      [...params, 'won']
     );
     const [activeResult] = await db.execute(
       `
       SELECT COUNT(*) as active FROM leads 
-      ${whereClause} ${
-        whereClause ? "AND" : "WHERE"
-      } stage IN ('contacted', 'warm', 'negotiating')
+      ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'} AND stage IN ('contacted', 'warm', 'negotiating')
     `,
       params
     );
     const [overdueResult] = await db.execute(
       `
       SELECT COUNT(*) as overdue FROM leads 
-      ${whereClause} ${
-        whereClause ? "AND" : "WHERE"
-      } followup_date < CURDATE() AND stage NOT IN ('won', 'lost')
+      ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'} AND followup_date < CURDATE() AND stage NOT IN ('won', 'lost')
     `,
       params
     );
