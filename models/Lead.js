@@ -28,8 +28,15 @@ export default class Lead {
 
     // Role-based filtering
     if (userRole !== "admin") {
-      query += " AND l.assigned_user_id = ?";
-      params.push(userId);
+      if (userId === 6) {
+        // For user 6, show leads assigned to them OR created by them
+        query += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
+        params.push(userId, userId);
+      } else {
+        // For other users, only show leads assigned to them
+        query += " AND l.assigned_user_id = ?";
+        params.push(userId);
+      }
     }
 
     // Apply other filters
@@ -100,8 +107,15 @@ export default class Lead {
 
     // Role-based filtering
     if (userRole !== "admin") {
-      query += " AND l.assigned_user_id = ?";
-      params.push(userId);
+      if (userId === 6) {
+        // For user 6, allow access to leads assigned to them OR created by them
+        query += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
+        params.push(userId, userId);
+      } else {
+        // For other users, only allow access to leads assigned to them
+        query += " AND l.assigned_user_id = ?";
+        params.push(userId);
+      }
     }
 
     const [rows] = await db.execute(query, params);
@@ -128,7 +142,9 @@ export default class Lead {
         const categorization = await categorizeLead(notes);
         if (categorization && categorization.assignedUserId) {
           finalAssignedUserId = categorization.assignedUserId;
-          console.log(`Lead categorized as "${categorization.category}" and assigned to user ${finalAssignedUserId}`);
+          console.log(
+            `Lead categorized as "${categorization.category}" and assigned to user ${finalAssignedUserId}`
+          );
         }
       } catch (error) {
         console.error("Error categorizing lead:", error);
@@ -199,8 +215,15 @@ export default class Lead {
 
     // Role-based filtering
     if (userRole !== "admin") {
-      query += " AND assigned_user_id = ?";
-      params.push(userId);
+      if (userId === 6) {
+        // For user 6, allow updating leads assigned to them OR created by them
+        query += " AND (assigned_user_id = ? OR created_by = ?)";
+        params.push(userId, userId);
+      } else {
+        // For other users, only allow updating leads assigned to them
+        query += " AND assigned_user_id = ?";
+        params.push(userId);
+      }
     }
 
     const [result] = await db.execute(query, params);
@@ -213,13 +236,21 @@ export default class Lead {
   }
 
   static async delete(id, userRole = "user", userId = null) {
-    let query = "UPDATE leads SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL";
+    let query =
+      "UPDATE leads SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL";
     const params = [id];
 
     // Role-based filtering
     if (userRole !== "admin") {
-      query += " AND assigned_user_id = ?";
-      params.push(userId);
+      if (userId === 6) {
+        // For user 6, allow deleting leads assigned to them OR created by them
+        query += " AND (assigned_user_id = ? OR created_by = ?)";
+        params.push(userId, userId);
+      } else {
+        // For other users, only allow deleting leads assigned to them
+        query += " AND assigned_user_id = ?";
+        params.push(userId);
+      }
     }
 
     const [result] = await db.execute(query, params);
@@ -236,24 +267,40 @@ export default class Lead {
     }
 
     const [totalResult] = await db.execute(
-      `SELECT COUNT(*) as total FROM leads ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'}`,
+      `SELECT COUNT(*) as total FROM leads ${
+        whereClause
+          ? whereClause + " AND deleted_at IS NULL"
+          : "WHERE deleted_at IS NULL"
+      }`,
       params
     );
     const [wonResult] = await db.execute(
-      `SELECT COUNT(*) as won FROM leads ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'} AND stage = ?`,
-      [...params, 'won']
+      `SELECT COUNT(*) as won FROM leads ${
+        whereClause
+          ? whereClause + " AND deleted_at IS NULL"
+          : "WHERE deleted_at IS NULL"
+      } AND stage = ?`,
+      [...params, "won"]
     );
     const [activeResult] = await db.execute(
       `
       SELECT COUNT(*) as active FROM leads 
-      ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'} AND stage IN ('contacted', 'warm', 'negotiating')
+      ${
+        whereClause
+          ? whereClause + " AND deleted_at IS NULL"
+          : "WHERE deleted_at IS NULL"
+      } AND stage IN ('contacted', 'warm', 'negotiating')
     `,
       params
     );
     const [overdueResult] = await db.execute(
       `
       SELECT COUNT(*) as overdue FROM leads 
-      ${whereClause ? whereClause + ' AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'} AND followup_date < CURDATE() AND stage NOT IN ('won', 'lost')
+      ${
+        whereClause
+          ? whereClause + " AND deleted_at IS NULL"
+          : "WHERE deleted_at IS NULL"
+      } AND followup_date < CURDATE() AND stage NOT IN ('won', 'lost')
     `,
       params
     );
