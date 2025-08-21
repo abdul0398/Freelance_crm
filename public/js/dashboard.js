@@ -493,7 +493,8 @@ function openModal(leadId = null) {
     const lead = leads.find((l) => l.id === leadId);
     if (lead) {
       modalTitle.textContent = "Edit Lead";
-      submitBtn.textContent = "Update Lead";
+      const submitBtnText = submitBtn.querySelector('.btn-text');
+      if (submitBtnText) submitBtnText.textContent = "Update Lead";
       if (deleteBtn) deleteBtn.style.display = "block";
       if (timelineSection) timelineSection.style.display = "block";
 
@@ -531,7 +532,8 @@ function openModal(leadId = null) {
     // Add mode
     editingLeadId = null;
     modalTitle.textContent = "Add New Lead";
-    submitBtn.textContent = "Add Lead";
+    const submitBtnText = submitBtn.querySelector('.btn-text');
+    if (submitBtnText) submitBtnText.textContent = "Add Lead";
     if (deleteBtn) deleteBtn.style.display = "none";
     if (timelineSection) timelineSection.style.display = "block";
 
@@ -651,8 +653,40 @@ async function fetchUsers() {
   }
 }
 
+// Store the current lead data for duplicate checking
+let pendingLeadData = null;
+
+// Button loading state management
+function setButtonLoading(buttonId, loading, loadingText = 'Processing...') {
+  const button = document.getElementById(buttonId);
+  if (!button) return;
+  
+  const textSpan = button.querySelector('.btn-text');
+  const spinnerSpan = button.querySelector('.btn-spinner');
+  
+  if (loading) {
+    button.classList.add('loading');
+    button.disabled = true;
+    if (textSpan) textSpan.style.display = 'none';
+    if (spinnerSpan) {
+      spinnerSpan.style.display = 'flex';
+      const spinnerText = spinnerSpan.querySelector('svg').nextSibling;
+      if (spinnerText) spinnerText.textContent = loadingText;
+    }
+  } else {
+    button.classList.remove('loading');
+    button.disabled = false;
+    if (textSpan) textSpan.style.display = 'inline';
+    if (spinnerSpan) spinnerSpan.style.display = 'none';
+  }
+}
+
 async function saveLead(leadData) {
   try {
+    // Set button to loading state
+    const submitBtnText = editingLeadId ? 'Updating...' : 'Checking for duplicates...';
+    setButtonLoading('submitBtn', true, submitBtnText);
+
     const apiData = {
       contact_name: leadData.contactName,
       company: leadData.company,
@@ -671,6 +705,44 @@ async function saveLead(leadData) {
         },
       }),
     };
+
+    // Check for duplicates only for new leads (not when editing)
+    if (!editingLeadId) {
+      pendingLeadData = apiData;
+      
+      // Check for duplicates
+      const duplicateResponse = await fetch(`${API_BASE}/leads/check-duplicates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiData),
+      });
+      
+      const duplicateCheck = await duplicateResponse.json();
+      
+      // Reset button state before showing duplicate modal
+      setButtonLoading('submitBtn', false);
+      
+      if (duplicateCheck.hasDuplicates && duplicateCheck.highestScore >= 50) {
+        // Show duplicate detection modal
+        showDuplicateModal(duplicateCheck);
+        return;
+      }
+    }
+
+    // Update button text for saving
+    setButtonLoading('submitBtn', true, editingLeadId ? 'Updating...' : 'Saving...');
+    
+    // If no duplicates or editing existing lead, save directly
+    await saveLeadDirectly(apiData);
+  } catch (error) {
+    console.error("Error saving lead:", error);
+    setButtonLoading('submitBtn', false);
+    alert("Error saving lead. Please try again.");
+  }
+}
+
+async function saveLeadDirectly(apiData) {
+  try {
     const url = editingLeadId
       ? `${API_BASE}/leads/${editingLeadId}`
       : `${API_BASE}/leads`;
@@ -684,8 +756,15 @@ async function saveLead(leadData) {
 
     await fetchLeads();
     closeModal();
+    closeDuplicateModal();
+    
+    // Reset button states
+    setButtonLoading('submitBtn', false);
+    setButtonLoading('saveAnywayBtn', false);
   } catch (error) {
     console.error("Error saving lead:", error);
+    setButtonLoading('submitBtn', false);
+    setButtonLoading('saveAnywayBtn', false);
     alert("Error saving lead. Please try again.");
   }
 }
@@ -696,9 +775,12 @@ async function removeLeadFromDB(leadId) {
       method: "DELETE",
     });
     await fetchLeads();
+    setButtonLoading('deleteBtn', false);
   } catch (error) {
     console.error("Error deleting lead:", error);
+    setButtonLoading('deleteBtn', false);
     alert("Error deleting lead. Please try again.");
+    throw error; // Re-throw to handle in deleteLead function
   }
 }
 
@@ -723,8 +805,14 @@ async function addActivity() {
     userId: currentUser?.id || null,
   };
 
-  await saveActivity(editingLeadId, activityData);
-  toggleActivityForm();
+  setButtonLoading('addActivityBtn', true, 'Adding...');
+  try {
+    await saveActivity(editingLeadId, activityData);
+    toggleActivityForm();
+    setButtonLoading('addActivityBtn', false);
+  } catch (error) {
+    setButtonLoading('addActivityBtn', false);
+  }
 }
 
 async function saveActivity(leadId, activityData) {
@@ -746,6 +834,7 @@ async function saveActivity(leadId, activityData) {
   } catch (error) {
     console.error("Error saving activity:", error);
     alert("Error saving activity. Please try again.");
+    throw error; // Re-throw to handle in addActivity function
   }
 }
 
@@ -767,8 +856,13 @@ async function addInitialActivity(leadId) {
 
 async function deleteLead() {
   if (editingLeadId && confirm("Are you sure you want to delete this lead?")) {
-    await removeLeadFromDB(editingLeadId);
-    closeModal();
+    setButtonLoading('deleteBtn', true, 'Deleting...');
+    try {
+      await removeLeadFromDB(editingLeadId);
+      closeModal();
+    } catch (error) {
+      setButtonLoading('deleteBtn', false);
+    }
   }
 }
 
@@ -828,6 +922,83 @@ function createLoadingOverlay() {
   `;
   document.body.appendChild(overlay);
 }
+
+// Duplicate Detection Modal Functions
+function showDuplicateModal(duplicateCheck) {
+  const modal = document.getElementById('duplicateModal');
+  const highestScoreElement = document.getElementById('highestScore');
+  const duplicatesListElement = document.getElementById('duplicatesList');
+  
+  // Set highest score
+  highestScoreElement.textContent = `${duplicateCheck.highestScore}%`;
+  
+  // Render duplicates list
+  duplicatesListElement.innerHTML = duplicateCheck.duplicates.map(duplicate => {
+    const scoreClass = duplicate.similarityScore >= 80 ? 'high' : 
+                      duplicate.similarityScore >= 65 ? 'medium' : 'low';
+    
+    return `
+      <div class="duplicate-item">
+        <div class="duplicate-header">
+          <strong>${duplicate.contactName || 'N/A'}</strong>
+          <span class="duplicate-score-badge ${scoreClass}">${duplicate.similarityScore}% Match</span>
+        </div>
+        <div class="duplicate-details">
+          <div class="duplicate-field">
+            <div class="duplicate-field-label">Company:</div>
+            <div class="duplicate-field-value">${duplicate.company || 'N/A'}</div>
+          </div>
+          <div class="duplicate-field">
+            <div class="duplicate-field-label">Platform:</div>
+            <div class="duplicate-field-value">${duplicate.platform || 'N/A'}</div>
+          </div>
+          <div class="duplicate-field">
+            <div class="duplicate-field-label">Deal Value:</div>
+            <div class="duplicate-field-value">$${duplicate.dealValue || 0}</div>
+          </div>
+          <div class="duplicate-field">
+            <div class="duplicate-field-label">Created:</div>
+            <div class="duplicate-field-value">${new Date(duplicate.createdAt).toLocaleDateString()}</div>
+          </div>
+        </div>
+        ${duplicate.reason ? `<div class="duplicate-reason">AI Analysis: ${duplicate.reason}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  // Show modal
+  modal.style.display = 'flex';
+}
+
+function closeDuplicateModal() {
+  const modal = document.getElementById('duplicateModal');
+  modal.style.display = 'none';
+  pendingLeadData = null;
+}
+
+function skipLead() {
+  closeDuplicateModal();
+  closeModal();
+}
+
+async function saveLeadAnyway() {
+  if (pendingLeadData) {
+    setButtonLoading('saveAnywayBtn', true, 'Saving...');
+    await saveLeadDirectly(pendingLeadData);
+  }
+}
+
+// Close duplicate modal on outside click
+document.addEventListener('DOMContentLoaded', () => {
+  const duplicateModal = document.getElementById('duplicateModal');
+  if (duplicateModal) {
+    duplicateModal.addEventListener('click', (e) => {
+      if (e.target.id === 'duplicateModal') {
+        closeDuplicateModal();
+      }
+    });
+  }
+});
 
 // Initialize the app
 window.addEventListener('DOMContentLoaded', () => {

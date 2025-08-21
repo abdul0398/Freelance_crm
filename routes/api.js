@@ -5,6 +5,7 @@ import Lead from "../models/Lead.js";
 import Activity from "../models/Activity.js";
 import User from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
+import { checkForDuplicates } from "../services/duplicateDetector.js";
 
 // Apply authentication middleware
 router.use(requireAuth);
@@ -68,10 +69,21 @@ router.get("/leads/:id", async (req, res) => {
   }
 });
 
+// Check for duplicates before creating lead
+router.post("/leads/check-duplicates", async (req, res) => {
+  try {
+    const duplicateCheck = await checkForDuplicates(req.body);
+    res.json(duplicateCheck);
+  } catch (error) {
+    console.error("Error checking for duplicates:", error);
+    res.status(500).json({ error: "Failed to check for duplicates" });
+  }
+});
+
 router.post("/leads", async (req, res) => {
   try {
     const leadId = await Lead.create(req.body, req.user.user_id);
-    res.status(201).json("");
+    res.status(201).json({ id: leadId, message: "Lead created successfully" });
   } catch (error) {
     console.error("Error creating lead:", error);
     res.status(500).json({ error: "Failed to create lead" });

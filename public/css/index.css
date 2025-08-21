@@ -1228,3 +1228,151 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Duplicate Detection Modal Styles */
+.duplicate-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fef3cd;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.warning-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.duplicate-warning p {
+  margin: 0;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.duplicate-warning p:first-child {
+  margin-bottom: 4px;
+}
+
+.duplicate-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--gray-100);
+  border-radius: 6px;
+}
+
+.score-label {
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.score-value {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--danger);
+}
+
+.duplicates-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.duplicate-item {
+  background: var(--white);
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.duplicate-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.duplicate-score-badge {
+  background: var(--danger);
+  color: var(--white);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.duplicate-score-badge.medium {
+  background: var(--warning);
+}
+
+.duplicate-score-badge.low {
+  background: var(--gray-500);
+}
+
+.duplicate-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.duplicate-field {
+  font-size: 14px;
+}
+
+.duplicate-field-label {
+  font-weight: 600;
+  color: var(--gray-600);
+  margin-bottom: 2px;
+}
+
+.duplicate-field-value {
+  color: var(--gray-900);
+}
+
+.duplicate-reason {
+  font-size: 13px;
+  color: var(--gray-600);
+  font-style: italic;
+  background: var(--gray-50);
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid var(--primary);
+}
+
+/* Button Loading States */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn.loading {
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.btn .btn-spinner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.btn .spinner {
+  animation: spin 1s linear infinite;
+}
+
+.btn .spinner circle {
+  stroke-linecap: round;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -323,8 +323,18 @@
                     type="button"
                     class="btn btn-primary btn-sm"
                     onclick="addActivity()"
+                    id="addActivityBtn"
                   >
-                    Add Activity
+                    <span class="btn-text">Add Activity</span>
+                    <span class="btn-spinner" style="display: none;">
+                      <svg class="spinner" width="14" height="14" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
+                          <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32" repeatCount="indefinite"/>
+                          <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32" repeatCount="indefinite"/>
+                        </circle>
+                      </svg>
+                      Adding...
+                    </span>
                   </button>
                 </div>
               </div>
@@ -351,7 +361,16 @@
                 style="display: none"
                 onclick="deleteLead()"
               >
-                Delete Lead
+                <span class="btn-text">Delete Lead</span>
+                <span class="btn-spinner" style="display: none;">
+                  <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
+                      <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32" repeatCount="indefinite"/>
+                      <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32" repeatCount="indefinite"/>
+                    </circle>
+                  </svg>
+                  Deleting...
+                </span>
               </button>
               <div style="display: flex; gap: 12px; margin-left: auto">
                 <button
@@ -362,12 +381,67 @@
                   Cancel
                 </button>
                 <button type="submit" class="btn btn-primary" id="submitBtn">
-                  Add Lead
+                  <span class="btn-text">Add Lead</span>
+                  <span class="btn-spinner" style="display: none;">
+                    <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
+                        <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32" repeatCount="indefinite"/>
+                        <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32" repeatCount="indefinite"/>
+                      </circle>
+                    </svg>
+                    Processing...
+                  </span>
                 </button>
               </div>
             </div>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Duplicate Detection Modal -->
+    <div class="modal" id="duplicateModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title">Potential Duplicates Detected</h2>
+        </div>
+        <div class="modal-body">
+          <div class="duplicate-warning">
+            <div class="warning-icon">⚠️</div>
+            <div>
+              <p><strong>We found potential duplicate leads in your system.</strong></p>
+              <p>Please review the similar leads below and decide whether to save this lead or skip it.</p>
+            </div>
+          </div>
+          
+          <div class="duplicate-score">
+            <span class="score-label">Highest Similarity Score:</span>
+            <span class="score-value" id="highestScore">0%</span>
+          </div>
+          
+          <div class="duplicates-list" id="duplicatesList">
+            <!-- Duplicate leads will be populated here -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div style="display: flex; gap: 12px; width: 100%; justify-content: space-between;">
+            <button type="button" class="btn btn-secondary" onclick="skipLead()" id="skipBtn">
+              <span class="btn-text">Skip Lead</span>
+            </button>
+            <button type="button" class="btn btn-primary" onclick="saveLeadAnyway()" id="saveAnywayBtn">
+              <span class="btn-text">Save Anyway</span>
+              <span class="btn-spinner" style="display: none;">
+                <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
+                    <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32" repeatCount="indefinite"/>
+                    <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32" repeatCount="indefinite"/>
+                  </circle>
+                </svg>
+                Saving...
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
