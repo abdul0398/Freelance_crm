@@ -204,6 +204,10 @@ body {
   background: rgba(239, 68, 68, 0.1);
   color: var(--danger);
 }
+.stat-icon.purple {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
 
 .stat-content {
   display: flex;

@@ -4,7 +4,7 @@ import { categorizeLead } from "../services/leadCategorizer.js";
 export default class Lead {
   static async getAll(filters = {}, userRole = "user", userId = null) {
     let query = `
-      SELECT 
+      SELECT
         l.id,
         l.contact_name,
         l.company,
@@ -17,6 +17,7 @@ export default class Lead {
         l.updated_at,
         u.name as assigned_user_name,
         u.id as assigned_user_id,
+        l.created_by,
         creator.name as created_by_name
       FROM leads l
       LEFT JOIN users u ON l.assigned_user_id = u.id
@@ -119,6 +120,7 @@ export default class Lead {
     }
 
     const [rows] = await db.execute(query, params);
+    console.log(rows[0].length);
     return rows[0];
   }
 

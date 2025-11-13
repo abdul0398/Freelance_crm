@@ -10,7 +10,7 @@ let currentUser = window.currentUser; // Use the current user from window
 let isLoading = false;
 
 // Pipeline stages configuration
-const stages = [
+const allStages = [
   { id: "cold", title: "Cold Outreach", color: "#6b7280" },
   { id: "contacted", title: "Contacted", color: "#3b82f6" },
   { id: "warm", title: "Warm Lead", color: "#f59e0b" },
@@ -18,6 +18,22 @@ const stages = [
   { id: "won", title: "Won", color: "#10b981" },
   { id: "lost", title: "Lost", color: "#ef4444" },
 ];
+
+// Helper function to check if current user is Leadgen
+function isLeadgenUser() {
+  return currentUser?.email === "Leadgen@brixq.com";
+}
+
+// Get stages based on user role
+function getStages() {
+  if (isLeadgenUser()) {
+    // Only show "cold" stage for Leadgen user
+    return allStages.filter(stage => stage.id === "cold");
+  }
+  return allStages;
+}
+
+const stages = getStages();
 
 // Initialize app
 async function init() {
@@ -62,6 +78,8 @@ async function fetchLeads() {
       lastUpdated: lead.updated_at,
       timeline: lead.timeline || [],
       assignedUserId: lead.assigned_user_id,
+      createdBy: lead.created_by,
+      createdByName: lead.created_by_name,
     }));
 
     filteredLeads = [...leads];
@@ -392,22 +410,52 @@ function escapeHtml(text) {
 
 // Update statistics
 function updateStats() {
-  const total = leads.length;
-  const won = leads.filter((l) => l.stage === "won").length;
-  const active = leads.filter((l) =>
-    ["contacted", "warm", "negotiating"].includes(l.stage)
-  ).length;
-  const overdue = leads.filter((l) => {
-    if (!l.followupDate || l.stage === "won" || l.stage === "lost")
-      return false;
-    return new Date(l.followupDate) < new Date();
-  }).length;
+  if (isLeadgenUser()) {
+    // For Leadgen user, only show Total Leads and Today leads count created by them
+    const total = leads.length;
 
-  document.getElementById("totalLeads").textContent = total;
-  document.getElementById("conversionRate").textContent =
-    total > 0 ? Math.round((won / total) * 100) + "%" : "0%";
-  document.getElementById("activeDeals").textContent = active;
-  document.getElementById("overdueFollowups").textContent = overdue;
+    // Calculate today's leads count created by current user
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayLeads = leads.filter((l) => {
+      const createdDate = new Date(l.createdAt);
+      createdDate.setHours(0, 0, 0, 0);
+      return createdDate.getTime() === today.getTime() && l.createdBy === currentUser?.id;
+    }).length;
+
+    document.getElementById("totalLeads").textContent = total;
+    document.getElementById("todayLeads").textContent = todayLeads;
+
+    // Hide other stats for Leadgen user
+    const statsToHide = document.querySelectorAll(".stat-item:not(.leadgen-stat)");
+    statsToHide.forEach(stat => stat.style.display = "none");
+
+    // Show only Leadgen stats
+    const leadgenStats = document.querySelectorAll(".stat-item.leadgen-stat");
+    leadgenStats.forEach(stat => stat.style.display = "flex");
+  } else {
+    // For other users, show all stats
+    const total = leads.length;
+    const won = leads.filter((l) => l.stage === "won").length;
+    const active = leads.filter((l) =>
+      ["contacted", "warm", "negotiating"].includes(l.stage)
+    ).length;
+    const overdue = leads.filter((l) => {
+      if (!l.followupDate || l.stage === "won" || l.stage === "lost")
+        return false;
+      return new Date(l.followupDate) < new Date();
+    }).length;
+
+    document.getElementById("totalLeads").textContent = total;
+    document.getElementById("conversionRate").textContent =
+      total > 0 ? Math.round((won / total) * 100) + "%" : "0%";
+    document.getElementById("activeDeals").textContent = active;
+    document.getElementById("overdueFollowups").textContent = overdue;
+
+    // Show all stats for regular users
+    const allStats = document.querySelectorAll(".stat-item");
+    allStats.forEach(stat => stat.style.display = "flex");
+  }
 }
 
 // Drag and Drop handlers
