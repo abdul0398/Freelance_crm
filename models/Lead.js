@@ -1,5 +1,4 @@
 import db from "../config/database.js";
-import { categorizeLead } from "../services/leadCategorizer.js";
 
 export default class Lead {
   static async getAll(filters = {}, userRole = "user", userId = null, limit = null, offset = 0) {
@@ -7,16 +6,31 @@ export default class Lead {
     let whereClause = "WHERE l.deleted_at IS NULL";
     const params = [];
 
-    // Role-based filtering
-    if (userRole !== "admin") {
-      if (userId === 6) {
-        // For user 6, show leads assigned to them OR created by them
-        whereClause += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
-        params.push(userId, userId);
-      } else {
-        // For other users, only show leads assigned to them
-        whereClause += " AND l.assigned_user_id = ?";
+    // Apply assigned_status filter (for Prospect user with custom tabs)
+    if (filters.assigned_status) {
+      if (filters.assigned_status === "unassigned") {
+        whereClause += " AND l.assigned_user_id IS NULL";
+      } else if (filters.assigned_status === "assigned") {
+        whereClause += " AND l.assigned_user_id IS NOT NULL";
+      }
+      // User 7 (Prospect) can see ALL leads when using assigned_status filter
+      // Other non-admin users with assigned_status filter should see leads created by them
+      if (userRole !== "admin" && userId !== 7) {
+        whereClause += " AND l.created_by = ?";
         params.push(userId);
+      }
+    } else {
+      // Role-based filtering (regular flow)
+      if (userRole !== "admin") {
+        if (userId === 6 || userId === 7) {
+          // For user 6 (Leadgen) and user 7 (Prospect), show leads assigned to them OR created by them
+          whereClause += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
+          params.push(userId, userId);
+        } else {
+          // For other users, only show leads assigned to them
+          whereClause += " AND l.assigned_user_id = ?";
+          params.push(userId);
+        }
       }
     }
 
@@ -120,7 +134,7 @@ export default class Lead {
 
   static async getById(id, userRole = "user", userId = null) {
     let query = `
-      SELECT 
+      SELECT
         l.*,
         u.name as assigned_user_name,
         creator.name as created_by_name
@@ -133,9 +147,10 @@ export default class Lead {
     const params = [id];
 
     // Role-based filtering
-    if (userRole !== "admin") {
+    if (userRole !== "admin" && userId !== 7) {
+      // User 7 (Prospect) can access ALL leads like admin
       if (userId === 6) {
-        // For user 6, allow access to leads assigned to them OR created by them
+        // For user 6 (Leadgen), allow access to leads assigned to them OR created by them
         query += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
         params.push(userId, userId);
       } else {
@@ -163,26 +178,15 @@ export default class Lead {
 
     let finalAssignedUserId = assigned_user_id;
 
-    // If created by user 6, categorize the lead and auto-assign
-    if (createdBy === 6) {
-      try {
-        const categorization = await categorizeLead(notes);
-        if (categorization && categorization.assignedUserId) {
-          finalAssignedUserId = categorization.assignedUserId;
-          console.log(
-            `Lead categorized as "${categorization.category}" and assigned to user ${finalAssignedUserId}`
-          );
-        }
-      } catch (error) {
-        console.error("Error categorizing lead:", error);
-        // Continue with original assignment if categorization fails
-      }
+    // If created by user 6 (Leadgen) or user 7 (Prospect), set assigned_user_id to null
+    if (createdBy === 6 || createdBy === 7) {
+      finalAssignedUserId = null;
     }
 
     const [result] = await db.execute(
       `
       INSERT INTO leads (
-        contact_name, company, platform, deal_value, 
+        contact_name, company, platform, deal_value,
         assigned_user_id, followup_date, notes, stage, created_by
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
@@ -241,9 +245,10 @@ export default class Lead {
     ];
 
     // Role-based filtering
-    if (userRole !== "admin") {
+    if (userRole !== "admin" && userId !== 7) {
+      // User 7 (Prospect) can update ALL leads like admin
       if (userId === 6) {
-        // For user 6, allow updating leads assigned to them OR created by them
+        // For user 6 (Leadgen), allow updating leads assigned to them OR created by them
         query += " AND (assigned_user_id = ? OR created_by = ?)";
         params.push(userId, userId);
       } else {
@@ -268,9 +273,10 @@ export default class Lead {
     const params = [id];
 
     // Role-based filtering
-    if (userRole !== "admin") {
+    if (userRole !== "admin" && userId !== 7) {
+      // User 7 (Prospect) can delete ALL leads like admin
       if (userId === 6) {
-        // For user 6, allow deleting leads assigned to them OR created by them
+        // For user 6 (Leadgen), allow deleting leads assigned to them OR created by them
         query += " AND (assigned_user_id = ? OR created_by = ?)";
         params.push(userId, userId);
       } else {
@@ -351,16 +357,31 @@ export default class Lead {
     let whereClause = "WHERE l.deleted_at IS NULL";
     const params = [];
 
-    // Role-based filtering
-    if (userRole !== "admin") {
-      if (userId === 6) {
-        // For user 6, show leads assigned to them OR created by them
-        whereClause += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
-        params.push(userId, userId);
-      } else {
-        // For other users, only show leads assigned to them
-        whereClause += " AND l.assigned_user_id = ?";
+    // Apply assigned_status filter (for Prospect user with custom tabs)
+    if (filters.assigned_status) {
+      if (filters.assigned_status === "unassigned") {
+        whereClause += " AND l.assigned_user_id IS NULL";
+      } else if (filters.assigned_status === "assigned") {
+        whereClause += " AND l.assigned_user_id IS NOT NULL";
+      }
+      // User 7 (Prospect) can see ALL leads when using assigned_status filter
+      // Other non-admin users with assigned_status filter should see leads created by them
+      if (userRole !== "admin" && userId !== 7) {
+        whereClause += " AND l.created_by = ?";
         params.push(userId);
+      }
+    } else {
+      // Role-based filtering (regular flow)
+      if (userRole !== "admin") {
+        if (userId === 6 || userId === 7) {
+          // For user 6 (Leadgen) and user 7 (Prospect), show leads assigned to them OR created by them
+          whereClause += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
+          params.push(userId, userId);
+        } else {
+          // For other users, only show leads assigned to them
+          whereClause += " AND l.assigned_user_id = ?";
+          params.push(userId);
+        }
       }
     }
 

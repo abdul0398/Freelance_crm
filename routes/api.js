@@ -19,6 +19,7 @@ router.get("/leads", async (req, res) => {
       stage: req.query.stage,
       search: req.query.search,
       followup: req.query.followup,
+      assigned_status: req.query.assigned_status,
     };
 
     // Pagination parameters
@@ -58,6 +59,7 @@ router.get("/leads/counts", async (req, res) => {
       assigned_user_id: req.query.assigned_user_id,
       search: req.query.search,
       followup: req.query.followup,
+      assigned_status: req.query.assigned_status,
     };
 
     const counts = await Lead.getCountsByStage(

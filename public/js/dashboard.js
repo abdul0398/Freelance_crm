@@ -27,11 +27,23 @@ function isLeadgenUser() {
   return currentUser?.email === "Leadgen@brixq.com";
 }
 
+// Helper function to check if current user is Prospect
+function isProspectUser() {
+  return currentUser?.email === "Prospect@brixq.com";
+}
+
 // Get stages based on user role
 function getStages() {
   if (isLeadgenUser()) {
     // Only show "cold" stage for Leadgen user
     return allStages.filter(stage => stage.id === "cold");
+  }
+  if (isProspectUser()) {
+    // Show "Cold Outreach" and "Enriched" tabs for Prospect user
+    return [
+      { id: "cold_outreach", title: "Cold Outreach", color: "#6b7280" },
+      { id: "enriched", title: "Enriched", color: "#3b82f6" }
+    ];
   }
   return allStages;
 }
@@ -80,8 +92,31 @@ async function fetchLeadCounts() {
     if (followupFilter) params.append("followup", followupFilter);
     if (userFilter) params.append("assigned_user_id", userFilter);
 
-    const response = await fetch(`${API_BASE}/leads/counts?${params}`);
-    stageCounts = await response.json();
+    // For Prospect user, get counts for custom stages
+    if (isProspectUser()) {
+      // Fetch counts for both unassigned and assigned leads
+      const [unassignedResponse, assignedResponse] = await Promise.all([
+        fetch(`${API_BASE}/leads/counts?${params}&assigned_status=unassigned`),
+        fetch(`${API_BASE}/leads/counts?${params}&assigned_status=assigned`)
+      ]);
+
+      const unassignedCounts = await unassignedResponse.json();
+      const assignedCounts = await assignedResponse.json();
+
+      // Calculate total counts for custom stages
+      const unassignedTotal = Object.values(unassignedCounts).reduce((sum, stage) => sum + (stage.count || 0), 0);
+      const unassignedValue = Object.values(unassignedCounts).reduce((sum, stage) => sum + (stage.totalValue || 0), 0);
+      const assignedTotal = Object.values(assignedCounts).reduce((sum, stage) => sum + (stage.count || 0), 0);
+      const assignedValue = Object.values(assignedCounts).reduce((sum, stage) => sum + (stage.totalValue || 0), 0);
+
+      stageCounts = {
+        cold_outreach: { count: unassignedTotal, totalValue: unassignedValue },
+        enriched: { count: assignedTotal, totalValue: assignedValue }
+      };
+    } else {
+      const response = await fetch(`${API_BASE}/leads/counts?${params}`);
+      stageCounts = await response.json();
+    }
 
     // Initialize counts for stages with no leads
     stages.forEach(stage => {
@@ -122,7 +157,21 @@ async function fetchLeadsForStage(stageId, isInitial = false) {
     }
 
     const params = new URLSearchParams();
-    params.append("stage", stageId);
+
+    // For Prospect user, handle custom stages
+    if (isProspectUser()) {
+      if (stageId === "cold_outreach") {
+        // Show unassigned leads (assigned_user_id is NULL)
+        params.append("assigned_status", "unassigned");
+      } else if (stageId === "enriched") {
+        // Show assigned leads (assigned_user_id is NOT NULL)
+        params.append("assigned_status", "assigned");
+      }
+    } else {
+      // For other users, use regular stage filtering
+      params.append("stage", stageId);
+    }
+
     params.append("limit", LEADS_PER_PAGE);
     params.append("offset", pagination.offset);
 
@@ -267,7 +316,7 @@ function renderPipeline() {
                       </div>
                   </div>
                   ${
-                    stage.id === "cold"
+                    (stage.id === "cold" || stage.id === "cold_outreach")
                       ? `
                       <div class="quick-add">
                           <button class="quick-add-btn" onclick="openModal()">+ Add Lead</button>
@@ -574,8 +623,8 @@ function updateStats() {
     if (["contacted", "warm", "negotiating"].includes(stage)) active += count;
   });
 
-  if (isLeadgenUser()) {
-    // For Leadgen user, only show Total Leads and Today leads count created by them
+  if (isLeadgenUser() || isProspectUser()) {
+    // For Leadgen/Prospect user, only show Total Leads and Today leads count created by them
     // Calculate today's leads count created by current user
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -588,7 +637,7 @@ function updateStats() {
     document.getElementById("totalLeads").textContent = total || 0;
     document.getElementById("todayLeads").textContent = todayLeads || 0;
 
-    // Hide other stats for Leadgen user
+    // Hide other stats for Leadgen/Prospect user
     const statsToHide = document.querySelectorAll(".stat-item:not(.leadgen-stat)");
     statsToHide.forEach(stat => stat.style.display = "none");
 
@@ -696,8 +745,9 @@ function openModal(leadId = null) {
     return;
   }
 
-  // Check if current user is admin
+  // Check if current user is admin or Prospect user
   const isAdmin = currentUser?.role === "admin";
+  const isProspect = isProspectUser();
 
   if (leadId) {
     // Edit mode
@@ -715,9 +765,9 @@ function openModal(leadId = null) {
       if (deleteBtn) deleteBtn.style.display = "block";
       if (timelineSection) timelineSection.style.display = "block";
 
-      // Show/hide assigned user based on admin status
+      // Show/hide assigned user based on admin or Prospect user status
       if (assignedUserGroup) {
-        if (isAdmin) {
+        if (isAdmin || isProspect) {
           assignedUserGroup.style.display = "block";
           assignedUserSelect.disabled = false;
         } else {
@@ -754,13 +804,17 @@ function openModal(leadId = null) {
     if (deleteBtn) deleteBtn.style.display = "none";
     if (timelineSection) timelineSection.style.display = "block";
 
-    // Show/hide assigned user based on admin status
+    // Show/hide assigned user based on admin or Prospect user status
     if (assignedUserGroup) {
-      if (isAdmin) {
+      if (isAdmin || isProspect) {
         assignedUserGroup.style.display = "block";
         assignedUserSelect.disabled = false;
-        // Set default to current user for admin
-        assignedUserSelect.value = currentUser.id;
+        // Set default to current user for admin, leave empty for Prospect
+        if (isAdmin) {
+          assignedUserSelect.value = currentUser.id;
+        } else {
+          assignedUserSelect.value = "";
+        }
       } else {
         assignedUserGroup.style.display = "none";
         assignedUserSelect.disabled = true;
@@ -772,6 +826,9 @@ function openModal(leadId = null) {
     // If admin, set default assigned user to current user
     if (isAdmin) {
       assignedUserSelect.value = currentUser.id;
+    } else if (isProspect) {
+      // For Prospect user, leave it unassigned
+      assignedUserSelect.value = "";
     }
   }
 
@@ -803,11 +860,12 @@ document.getElementById("leadForm").addEventListener("submit", async (e) => {
   let assignedUser;
 
   const isAdmin = currentUser?.role === "admin";
+  const isProspect = isProspectUser();
 
   if (editingLeadId) {
     // For editing
-    if (isAdmin) {
-      // Admin can change assigned user
+    if (isAdmin || isProspect) {
+      // Admin and Prospect can change assigned user
       assignedUserId = document.getElementById("assignedUser").value;
       assignedUser = users.find((u) => u.id == assignedUserId);
     } else {
@@ -827,6 +885,10 @@ document.getElementById("leadForm").addEventListener("submit", async (e) => {
       assignedUserId =
         document.getElementById("assignedUser").value || currentUser.id;
       assignedUser = users.find((u) => u.id == assignedUserId) || currentUser;
+    } else if (isProspect) {
+      // Prospect can select user (or leave unassigned)
+      assignedUserId = document.getElementById("assignedUser").value || null;
+      assignedUser = assignedUserId ? users.find((u) => u.id == assignedUserId) : null;
     } else {
       // Non-admin gets auto-assigned to current user
       assignedUserId = currentUser?.id;
