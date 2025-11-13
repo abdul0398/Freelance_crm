@@ -2,7 +2,80 @@ import db from "../config/database.js";
 import { categorizeLead } from "../services/leadCategorizer.js";
 
 export default class Lead {
-  static async getAll(filters = {}, userRole = "user", userId = null) {
+  static async getAll(filters = {}, userRole = "user", userId = null, limit = null, offset = 0) {
+    // Build WHERE clause
+    let whereClause = "WHERE l.deleted_at IS NULL";
+    const params = [];
+
+    // Role-based filtering
+    if (userRole !== "admin") {
+      if (userId === 6) {
+        // For user 6, show leads assigned to them OR created by them
+        whereClause += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
+        params.push(userId, userId);
+      } else {
+        // For other users, only show leads assigned to them
+        whereClause += " AND l.assigned_user_id = ?";
+        params.push(userId);
+      }
+    }
+
+    // Apply other filters
+    if (filters.platform) {
+      whereClause += " AND l.platform = ?";
+      params.push(filters.platform);
+    }
+
+    if (filters.assigned_user_id) {
+      whereClause += " AND l.assigned_user_id = ?";
+      params.push(filters.assigned_user_id);
+    }
+
+    if (filters.stage) {
+      whereClause += " AND l.stage = ?";
+      params.push(filters.stage);
+    }
+
+    if (filters.search) {
+      whereClause += " AND (l.contact_name LIKE ? OR l.company LIKE ?)";
+      params.push(`%${filters.search}%`, `%${filters.search}%`);
+    }
+
+    // Handle follow-up filters
+    if (filters.followup) {
+      const today = new Date().toISOString().split("T")[0];
+
+      switch (filters.followup) {
+        case "overdue":
+          whereClause += " AND l.followup_date < ?";
+          params.push(today);
+          break;
+        case "today":
+          whereClause += " AND l.followup_date = ?";
+          params.push(today);
+          break;
+        case "week":
+          const weekFromNow = new Date();
+          weekFromNow.setDate(weekFromNow.getDate() + 7);
+          whereClause += " AND l.followup_date BETWEEN ? AND ?";
+          params.push(today, weekFromNow.toISOString().split("T")[0]);
+          break;
+        case "none":
+          whereClause += " AND l.followup_date IS NULL";
+          break;
+      }
+    }
+
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM leads l
+      ${whereClause}
+    `;
+    const [countResult] = await db.execute(countQuery, params);
+    const total = countResult[0].total;
+
+    // Get paginated leads
     let query = `
       SELECT
         l.id,
@@ -22,74 +95,27 @@ export default class Lead {
       FROM leads l
       LEFT JOIN users u ON l.assigned_user_id = u.id
       LEFT JOIN users creator ON l.created_by = creator.id
-      WHERE l.deleted_at IS NULL
+      ${whereClause}
+      ORDER BY l.updated_at DESC
     `;
 
-    const params = [];
+    // Create a copy of params for the main query to avoid modifying the original
+    const queryParams = [...params];
 
-    // Role-based filtering
-    if (userRole !== "admin") {
-      if (userId === 6) {
-        // For user 6, show leads assigned to them OR created by them
-        query += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
-        params.push(userId, userId);
-      } else {
-        // For other users, only show leads assigned to them
-        query += " AND l.assigned_user_id = ?";
-        params.push(userId);
-      }
+    // Add pagination if limit is provided
+    if (limit !== null) {
+      // Ensure limit and offset are integers, not strings
+      const limitInt = parseInt(limit, 10);
+      const offsetInt = parseInt(offset, 10);
+      query += ` LIMIT ${limitInt} OFFSET ${offsetInt}`;
     }
 
-    // Apply other filters
-    if (filters.platform) {
-      query += " AND l.platform = ?";
-      params.push(filters.platform);
-    }
+    const [rows] = await db.execute(query, queryParams);
 
-    if (filters.assigned_user_id) {
-      query += " AND l.assigned_user_id = ?";
-      params.push(filters.assigned_user_id);
-    }
-
-    if (filters.stage) {
-      query += " AND l.stage = ?";
-      params.push(filters.stage);
-    }
-
-    if (filters.search) {
-      query += " AND (l.contact_name LIKE ? OR l.company LIKE ?)";
-      params.push(`%${filters.search}%`, `%${filters.search}%`);
-    }
-
-    // Handle follow-up filters
-    if (filters.followup) {
-      const today = new Date().toISOString().split("T")[0];
-
-      switch (filters.followup) {
-        case "overdue":
-          query += " AND l.followup_date < ?";
-          params.push(today);
-          break;
-        case "today":
-          query += " AND l.followup_date = ?";
-          params.push(today);
-          break;
-        case "week":
-          const weekFromNow = new Date();
-          weekFromNow.setDate(weekFromNow.getDate() + 7);
-          query += " AND l.followup_date BETWEEN ? AND ?";
-          params.push(today, weekFromNow.toISOString().split("T")[0]);
-          break;
-        case "none":
-          query += " AND l.followup_date IS NULL";
-          break;
-      }
-    }
-
-    query += " ORDER BY l.updated_at DESC";
-
-    const [rows] = await db.execute(query, params);
-    return rows;
+    return {
+      leads: rows,
+      total: total
+    };
   }
 
   static async getById(id, userRole = "user", userId = null) {
@@ -120,7 +146,6 @@ export default class Lead {
     }
 
     const [rows] = await db.execute(query, params);
-    console.log(rows[0].length);
     return rows[0];
   }
 
@@ -319,5 +344,89 @@ export default class Lead {
       overdue,
       conversion_rate: total > 0 ? Math.round((won / total) * 100) : 0,
     };
+  }
+
+  static async getCountsByStage(filters = {}, userRole = "user", userId = null) {
+    // Build WHERE clause
+    let whereClause = "WHERE l.deleted_at IS NULL";
+    const params = [];
+
+    // Role-based filtering
+    if (userRole !== "admin") {
+      if (userId === 6) {
+        // For user 6, show leads assigned to them OR created by them
+        whereClause += " AND (l.assigned_user_id = ? OR l.created_by = ?)";
+        params.push(userId, userId);
+      } else {
+        // For other users, only show leads assigned to them
+        whereClause += " AND l.assigned_user_id = ?";
+        params.push(userId);
+      }
+    }
+
+    // Apply other filters
+    if (filters.platform) {
+      whereClause += " AND l.platform = ?";
+      params.push(filters.platform);
+    }
+
+    if (filters.assigned_user_id) {
+      whereClause += " AND l.assigned_user_id = ?";
+      params.push(filters.assigned_user_id);
+    }
+
+    if (filters.search) {
+      whereClause += " AND (l.contact_name LIKE ? OR l.company LIKE ?)";
+      params.push(`%${filters.search}%`, `%${filters.search}%`);
+    }
+
+    // Handle follow-up filters
+    if (filters.followup) {
+      const today = new Date().toISOString().split("T")[0];
+
+      switch (filters.followup) {
+        case "overdue":
+          whereClause += " AND l.followup_date < ?";
+          params.push(today);
+          break;
+        case "today":
+          whereClause += " AND l.followup_date = ?";
+          params.push(today);
+          break;
+        case "week":
+          const weekFromNow = new Date();
+          weekFromNow.setDate(weekFromNow.getDate() + 7);
+          whereClause += " AND l.followup_date BETWEEN ? AND ?";
+          params.push(today, weekFromNow.toISOString().split("T")[0]);
+          break;
+        case "none":
+          whereClause += " AND l.followup_date IS NULL";
+          break;
+      }
+    }
+
+    // Get counts per stage and total deal value per stage
+    const query = `
+      SELECT
+        l.stage,
+        COUNT(*) as count,
+        SUM(l.deal_value) as total_value
+      FROM leads l
+      ${whereClause}
+      GROUP BY l.stage
+    `;
+
+    const [rows] = await db.execute(query, params);
+
+    // Convert to object with stage as key
+    const counts = {};
+    rows.forEach(row => {
+      counts[row.stage] = {
+        count: row.count,
+        totalValue: row.total_value || 0
+      };
+    });
+
+    return counts;
   }
 }

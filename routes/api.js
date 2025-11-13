@@ -21,30 +21,54 @@ router.get("/leads", async (req, res) => {
       followup: req.query.followup,
     };
 
-    const leads = await Lead.getAll(filters, req.user.role, req.user.user_id);
+    // Pagination parameters
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
 
-    // Get activities for each lead
-    const leadsWithActivities = await Promise.all(
-      leads.map(async (lead) => {
-        const activities = await Activity.getByLeadId(lead.id);
-        return {
-          ...lead,
-          timeline: activities.map((activity) => ({
-            id: activity.id.toString(),
-            type: activity.type,
-            date: activity.activity_date,
-            description: activity.description,
-            user: activity.user_name || "Unknown User",
-            createdAt: activity.created_at,
-          })),
-        };
-      })
+    const result = await Lead.getAll(
+      filters,
+      req.user.role,
+      req.user.user_id,
+      limit,
+      offset
     );
 
-    res.json(leadsWithActivities);
+    // Don't fetch activities on initial load
+    const leadsWithEmptyTimeline = result.leads.map((lead) => ({
+      ...lead,
+      timeline: [],
+    }));
+
+    res.json({
+      leads: leadsWithEmptyTimeline,
+      total: result.total,
+      hasMore: offset + limit < result.total,
+    });
   } catch (error) {
     console.error("Error fetching leads:", error);
     res.status(500).json({ error: "Failed to fetch leads" });
+  }
+});
+
+// Lead counts per stage route - MUST come before /leads/:id
+router.get("/leads/counts", async (req, res) => {
+  try {
+    const filters = {
+      platform: req.query.platform,
+      assigned_user_id: req.query.assigned_user_id,
+      search: req.query.search,
+      followup: req.query.followup,
+    };
+
+    const counts = await Lead.getCountsByStage(
+      filters,
+      req.user.role,
+      req.user.user_id
+    );
+    res.json(counts);
+  } catch (error) {
+    console.error("Error fetching lead counts:", error);
+    res.status(500).json({ error: "Failed to fetch lead counts" });
   }
 });
 

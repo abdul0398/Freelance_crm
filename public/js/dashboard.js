@@ -2,12 +2,15 @@
 const API_BASE = "/api";
 
 // App State
-let leads = [];
-let filteredLeads = [];
+let allLeads = []; // For stats calculation
+let leadsByStage = {}; // Store leads per stage: { cold: [], contacted: [], ... }
+let stageCounts = {}; // Store total counts per stage: { cold: { count: 50, totalValue: 10000 }, ... }
+let stagePagination = {}; // Track pagination per stage: { cold: { offset: 0, hasMore: true, loading: false }, ... }
 let users = [];
 let editingLeadId = null;
 let currentUser = window.currentUser; // Use the current user from window
 let isLoading = false;
+const LEADS_PER_PAGE = 20;
 
 // Pipeline stages configuration
 const allStages = [
@@ -38,15 +41,32 @@ const stages = getStages();
 // Initialize app
 async function init() {
   await fetchUsers();
-  await fetchLeads();
+  initializePagination();
+  await Promise.all([
+    fetchLeadCounts(),
+    fetchAllStagesInitial()
+  ]);
   renderPipeline();
   updateStats();
   setupEventListeners();
+  setupInfiniteScroll();
 }
 
-async function fetchLeads() {
+// Initialize pagination state for each stage
+function initializePagination() {
+  stages.forEach(stage => {
+    leadsByStage[stage.id] = [];
+    stagePagination[stage.id] = {
+      offset: 0,
+      hasMore: true,
+      loading: false
+    };
+  });
+}
+
+// Fetch lead counts per stage
+async function fetchLeadCounts() {
   try {
-    setLoading(true);
     const params = new URLSearchParams();
 
     // Add filters
@@ -60,11 +80,68 @@ async function fetchLeads() {
     if (followupFilter) params.append("followup", followupFilter);
     if (userFilter) params.append("assigned_user_id", userFilter);
 
+    const response = await fetch(`${API_BASE}/leads/counts?${params}`);
+    stageCounts = await response.json();
+
+    // Initialize counts for stages with no leads
+    stages.forEach(stage => {
+      if (!stageCounts[stage.id]) {
+        stageCounts[stage.id] = { count: 0, totalValue: 0 };
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching lead counts:", error);
+  }
+}
+
+// Fetch initial leads for all stages
+async function fetchAllStagesInitial() {
+  setLoading(true);
+  try {
+    await Promise.all(stages.map(stage => fetchLeadsForStage(stage.id, true)));
+  } catch (error) {
+    console.error("Error fetching initial leads:", error);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// Fetch leads for a specific stage
+async function fetchLeadsForStage(stageId, isInitial = false) {
+  const pagination = stagePagination[stageId];
+
+  // Don't fetch if already loading or no more data
+  if (!isInitial && (pagination.loading || !pagination.hasMore)) {
+    return;
+  }
+
+  try {
+    pagination.loading = true;
+    if (!isInitial) {
+      showStageLoader(stageId);
+    }
+
+    const params = new URLSearchParams();
+    params.append("stage", stageId);
+    params.append("limit", LEADS_PER_PAGE);
+    params.append("offset", pagination.offset);
+
+    // Add filters
+    const searchTerm = document.querySelector(".search-input").value;
+    const platformFilter = document.getElementById("platformFilter").value;
+    const followupFilter = document.getElementById("followupFilter").value;
+    const userFilter = document.getElementById("userFilter").value;
+
+    if (searchTerm) params.append("search", searchTerm);
+    if (platformFilter) params.append("platform", platformFilter);
+    if (followupFilter) params.append("followup", followupFilter);
+    if (userFilter) params.append("assigned_user_id", userFilter);
+
     const response = await fetch(`${API_BASE}/leads?${params}`);
-    leads = await response.json();
+    const data = await response.json();
 
     // Transform data to match frontend format
-    leads = leads.map((lead) => ({
+    const transformedLeads = data.leads.map((lead) => ({
       id: lead.id.toString(),
       contactName: lead.contact_name,
       company: lead.company,
@@ -82,14 +159,49 @@ async function fetchLeads() {
       createdByName: lead.created_by_name,
     }));
 
-    filteredLeads = [...leads];
-    renderPipeline();
-    updateStats();
+    // Append new leads to stage
+    leadsByStage[stageId] = [...leadsByStage[stageId], ...transformedLeads];
+
+    // Update pagination state
+    pagination.offset += transformedLeads.length;
+    pagination.hasMore = data.hasMore;
+
+    // Update allLeads for stats
+    updateAllLeads();
+
+    if (!isInitial) {
+      renderStage(stageId);
+      updateStats();
+    }
   } catch (error) {
-    console.error("Error fetching leads:", error);
+    console.error(`Error fetching leads for stage ${stageId}:`, error);
   } finally {
-    setLoading(false);
+    pagination.loading = false;
+    if (!isInitial) {
+      hideStageLoader(stageId);
+    }
   }
+}
+
+// Update allLeads array from all stages (for stats calculation)
+function updateAllLeads() {
+  allLeads = [];
+  Object.values(leadsByStage).forEach(stageLeads => {
+    allLeads.push(...stageLeads);
+  });
+}
+
+// Refresh data after lead changes (create, update, delete)
+async function refreshAfterChange() {
+  // Reset and refetch all stages
+  initializePagination();
+  await Promise.all([
+    fetchLeadCounts(),
+    fetchAllStagesInitial()
+  ]);
+  renderPipeline();
+  updateStats();
+  setupInfiniteScroll(); // Re-setup scroll listeners after DOM recreation
 }
 
 // Populate user dropdowns
@@ -110,57 +222,16 @@ function populateUserDropdowns() {
   });
 }
 
-// Apply filters
-function applyFilters() {
-  const searchTerm = document
-    .querySelector(".search-input")
-    .value.toLowerCase();
-  const platformFilter = document.getElementById("platformFilter").value;
-  const followupFilter = document.getElementById("followupFilter").value;
-  const userFilter = document.getElementById("userFilter").value;
-
-  filteredLeads = leads.filter((lead) => {
-    // Search filter
-    const matchesSearch =
-      !searchTerm ||
-      lead.contactName.toLowerCase().includes(searchTerm) ||
-      (lead.company && lead.company.toLowerCase().includes(searchTerm));
-
-    // Platform filter
-    const matchesPlatform = !platformFilter || lead.platform === platformFilter;
-
-    // User filter
-    const matchesUser = !userFilter || lead.assignedUserId == userFilter;
-
-    // Follow-up filter
-    let matchesFollowup = true;
-    if (followupFilter) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      if (followupFilter === "overdue") {
-        matchesFollowup =
-          lead.followupDate && new Date(lead.followupDate) < today;
-      } else if (followupFilter === "today") {
-        matchesFollowup =
-          lead.followupDate &&
-          new Date(lead.followupDate).toDateString() === today.toDateString();
-      } else if (followupFilter === "week") {
-        const weekFromNow = new Date(today);
-        weekFromNow.setDate(weekFromNow.getDate() + 7);
-        matchesFollowup =
-          lead.followupDate &&
-          new Date(lead.followupDate) >= today &&
-          new Date(lead.followupDate) <= weekFromNow;
-      } else if (followupFilter === "none") {
-        matchesFollowup = !lead.followupDate;
-      }
-    }
-
-    return matchesSearch && matchesPlatform && matchesFollowup && matchesUser;
-  });
-
+// Apply filters - reset and refetch all stages
+async function applyFilters() {
+  initializePagination();
+  await Promise.all([
+    fetchLeadCounts(),
+    fetchAllStagesInitial()
+  ]);
   renderPipeline();
+  updateStats();
+  setupInfiniteScroll(); // Re-setup scroll listeners after DOM recreation
 }
 
 // Render pipeline view
@@ -169,31 +240,31 @@ function renderPipeline() {
 
   pipelineEl.innerHTML = stages
     .map((stage) => {
-      const stageLeads = filteredLeads.filter(
-        (lead) => lead.stage === stage.id
-      );
-      const totalValue = stageLeads.reduce(
-        (sum, lead) => sum + (parseFloat(lead.dealValue) || 0),
-        0
-      );
+      const stageLeads = leadsByStage[stage.id] || [];
+      const stageCount = stageCounts[stage.id]?.count || 0;
+      const totalValue = stageCounts[stage.id]?.totalValue || 0;
 
       return `
               <div class="stage" data-stage="${stage.id}">
                   <div class="stage-header">
                       <h3 class="stage-title">
                           ${stage.title}
-                          <span class="stage-count">${stageLeads.length}</span>
+                          <span class="stage-count">${stageCount}</span>
                       </h3>
                       ${
                         totalValue > 0
-                          ? `<div class="stage-value">$${totalValue}</div>`
+                          ? `<div class="stage-value">$${totalValue.toLocaleString()}</div>`
                           : ""
                       }
                   </div>
-                  <div class="stage-cards" ondrop="handleDrop(event, '${
+                  <div class="stage-cards" data-stage-id="${stage.id}" ondrop="handleDrop(event, '${
                     stage.id
                   }')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
                       ${stageLeads.map((lead) => renderLeadCard(lead)).join("")}
+                      <div class="stage-loader" id="loader-${stage.id}" style="display: none;">
+                          <div class="loading-spinner"></div>
+                          <div>Loading more...</div>
+                      </div>
                   </div>
                   ${
                     stage.id === "cold"
@@ -208,6 +279,59 @@ function renderPipeline() {
           `;
     })
     .join("");
+}
+
+// Render a single stage (for updates after pagination)
+function renderStage(stageId) {
+  const stageEl = document.querySelector(`.stage[data-stage="${stageId}"]`);
+  if (!stageEl) return;
+
+  const stage = stages.find(s => s.id === stageId);
+  if (!stage) return;
+
+  const stageLeads = leadsByStage[stageId] || [];
+  const stageCount = stageCounts[stageId]?.count || 0;
+  const totalValue = stageCounts[stageId]?.totalValue || 0;
+
+  // Update count (use total count, not loaded leads count)
+  const countEl = stageEl.querySelector('.stage-count');
+  if (countEl) countEl.textContent = stageCount;
+
+  // Update value
+  const valueEl = stageEl.querySelector('.stage-value');
+  if (totalValue > 0) {
+    if (valueEl) {
+      valueEl.textContent = `$${totalValue.toLocaleString()}`;
+    } else {
+      const headerEl = stageEl.querySelector('.stage-header h3');
+      if (headerEl) {
+        headerEl.insertAdjacentHTML('afterend', `<div class="stage-value">$${totalValue.toLocaleString()}</div>`);
+      }
+    }
+  } else if (valueEl) {
+    valueEl.remove();
+  }
+
+  // Update cards (preserving the loader)
+  const cardsEl = stageEl.querySelector('.stage-cards');
+  if (cardsEl) {
+    const loaderEl = cardsEl.querySelector('.stage-loader');
+    cardsEl.innerHTML = stageLeads.map((lead) => renderLeadCard(lead)).join("");
+    if (loaderEl) {
+      cardsEl.appendChild(loaderEl);
+    }
+  }
+}
+
+// Show/hide stage loader
+function showStageLoader(stageId) {
+  const loader = document.getElementById(`loader-${stageId}`);
+  if (loader) loader.style.display = 'flex';
+}
+
+function hideStageLoader(stageId) {
+  const loader = document.getElementById(`loader-${stageId}`);
+  if (loader) loader.style.display = 'none';
 }
 
 // Render individual lead card
@@ -408,23 +532,61 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Setup infinite scroll for each stage
+function setupInfiniteScroll() {
+  stages.forEach(stage => {
+    const stageCards = document.querySelector(`.stage-cards[data-stage-id="${stage.id}"]`);
+    if (!stageCards) return;
+
+    // Remove existing scroll listener to avoid duplicates
+    const oldHandler = stageCards._scrollHandler;
+    if (oldHandler) {
+      stageCards.removeEventListener('scroll', oldHandler);
+    }
+
+    // Create new handler
+    const scrollHandler = () => {
+      const { scrollTop, scrollHeight, clientHeight } = stageCards;
+      const scrolledToBottom = scrollHeight - scrollTop - clientHeight < 100; // Trigger 100px before bottom
+
+      if (scrolledToBottom && !stagePagination[stage.id].loading && stagePagination[stage.id].hasMore) {
+        fetchLeadsForStage(stage.id, false);
+      }
+    };
+
+    // Store handler reference for cleanup
+    stageCards._scrollHandler = scrollHandler;
+    stageCards.addEventListener('scroll', scrollHandler);
+  });
+}
+
 // Update statistics
 function updateStats() {
+  // Calculate total from stageCounts
+  let total = 0;
+  let won = 0;
+  let active = 0;
+
+  Object.entries(stageCounts).forEach(([stage, data]) => {
+    const count = parseInt(data.count) || 0;
+    total += count;
+    if (stage === "won") won += count;
+    if (["contacted", "warm", "negotiating"].includes(stage)) active += count;
+  });
+
   if (isLeadgenUser()) {
     // For Leadgen user, only show Total Leads and Today leads count created by them
-    const total = leads.length;
-
     // Calculate today's leads count created by current user
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayLeads = leads.filter((l) => {
+    const todayLeads = allLeads.filter((l) => {
       const createdDate = new Date(l.createdAt);
       createdDate.setHours(0, 0, 0, 0);
       return createdDate.getTime() === today.getTime() && l.createdBy === currentUser?.id;
     }).length;
 
-    document.getElementById("totalLeads").textContent = total;
-    document.getElementById("todayLeads").textContent = todayLeads;
+    document.getElementById("totalLeads").textContent = total || 0;
+    document.getElementById("todayLeads").textContent = todayLeads || 0;
 
     // Hide other stats for Leadgen user
     const statsToHide = document.querySelectorAll(".stat-item:not(.leadgen-stat)");
@@ -435,22 +597,18 @@ function updateStats() {
     leadgenStats.forEach(stat => stat.style.display = "flex");
   } else {
     // For other users, show all stats
-    const total = leads.length;
-    const won = leads.filter((l) => l.stage === "won").length;
-    const active = leads.filter((l) =>
-      ["contacted", "warm", "negotiating"].includes(l.stage)
-    ).length;
-    const overdue = leads.filter((l) => {
+    // Calculate overdue from loaded leads (we need dates for this)
+    const overdue = allLeads.filter((l) => {
       if (!l.followupDate || l.stage === "won" || l.stage === "lost")
         return false;
       return new Date(l.followupDate) < new Date();
     }).length;
 
-    document.getElementById("totalLeads").textContent = total;
+    document.getElementById("totalLeads").textContent = total || 0;
     document.getElementById("conversionRate").textContent =
       total > 0 ? Math.round((won / total) * 100) + "%" : "0%";
-    document.getElementById("activeDeals").textContent = active;
-    document.getElementById("overdueFollowups").textContent = overdue;
+    document.getElementById("activeDeals").textContent = active || 0;
+    document.getElementById("overdueFollowups").textContent = overdue || 0;
 
     // Show all stats for regular users
     const allStats = document.querySelectorAll(".stat-item");
@@ -493,7 +651,13 @@ async function handleDrop(e, stageId) {
   e.currentTarget.classList.remove("drag-over");
   const leadId = draggedLeadId;
   if (leadId) {
-    const lead = leads.find((l) => l.id === leadId);
+    // Find lead in all stages
+    let lead = null;
+    for (const [stage, stageLeads] of Object.entries(leadsByStage)) {
+      lead = stageLeads.find((l) => l.id === leadId);
+      if (lead) break;
+    }
+
     if (lead) {
       const updatedData = {
         contactName: lead.contactName,
@@ -538,7 +702,12 @@ function openModal(leadId = null) {
   if (leadId) {
     // Edit mode
     editingLeadId = leadId;
-    const lead = leads.find((l) => l.id === leadId);
+    // Find lead in all stages
+    let lead = null;
+    for (const [stage, stageLeads] of Object.entries(leadsByStage)) {
+      lead = stageLeads.find((l) => l.id === leadId);
+      if (lead) break;
+    }
     if (lead) {
       modalTitle.textContent = "Edit Lead";
       const submitBtnText = submitBtn.querySelector('.btn-text');
@@ -643,7 +812,11 @@ document.getElementById("leadForm").addEventListener("submit", async (e) => {
       assignedUser = users.find((u) => u.id == assignedUserId);
     } else {
       // Non-admin keeps existing assignment
-      const existingLead = leads.find((l) => l.id === editingLeadId);
+      let existingLead = null;
+      for (const [stage, stageLeads] of Object.entries(leadsByStage)) {
+        existingLead = stageLeads.find((l) => l.id === editingLeadId);
+        if (existingLead) break;
+      }
       assignedUserId = existingLead?.assignedUserId;
       assignedUser = users.find((u) => u.id == assignedUserId);
     }
@@ -802,10 +975,10 @@ async function saveLeadDirectly(apiData) {
       body: JSON.stringify(apiData),
     });
 
-    await fetchLeads();
+    await refreshAfterChange();
     closeModal();
     closeDuplicateModal();
-    
+
     // Reset button states
     setButtonLoading('submitBtn', false);
     setButtonLoading('saveAnywayBtn', false);
@@ -822,7 +995,7 @@ async function removeLeadFromDB(leadId) {
     await fetch(`${API_BASE}/leads/${leadId}`, {
       method: "DELETE",
     });
-    await fetchLeads();
+    await refreshAfterChange();
     setButtonLoading('deleteBtn', false);
   } catch (error) {
     console.error("Error deleting lead:", error);
@@ -878,7 +1051,7 @@ async function saveActivity(leadId, activityData) {
       body: JSON.stringify(apiData),
     });
 
-    await fetchLeads();
+    await refreshAfterChange();
   } catch (error) {
     console.error("Error saving activity:", error);
     alert("Error saving activity. Please try again.");
