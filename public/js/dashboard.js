@@ -896,6 +896,18 @@ document.getElementById("leadForm").addEventListener("submit", async (e) => {
     }
   }
 
+  // Find the current stage of the lead being edited
+  let currentStage = "cold";
+  if (editingLeadId) {
+    for (const [stage, stageLeads] of Object.entries(leadsByStage)) {
+      const lead = stageLeads.find((l) => l.id === editingLeadId);
+      if (lead) {
+        currentStage = lead.stage;
+        break;
+      }
+    }
+  }
+
   const leadData = {
     contactName: document.getElementById("contactName").value,
     company: document.getElementById("company").value,
@@ -904,9 +916,7 @@ document.getElementById("leadForm").addEventListener("submit", async (e) => {
     assignedUserId: assignedUser ? assignedUser.id : null,
     followupDate: document.getElementById("followupDate").value,
     notes: document.getElementById("notes").value,
-    stage: editingLeadId
-      ? leads.find((l) => l.id === editingLeadId)?.stage || "cold"
-      : "cold",
+    stage: currentStage,
   };
 
   // --- NEW: bundle activity if user filled it out ---
