@@ -100,6 +100,7 @@ export default class Lead {
         l.followup_date,
         l.notes,
         l.stage,
+        l.no_information_available,
         l.created_at,
         l.updated_at,
         u.name as assigned_user_name,
@@ -449,5 +450,40 @@ export default class Lead {
     });
 
     return counts;
+  }
+
+  static async toggleNoInformation(id, userId) {
+    // Only user ID 7 (Prospect) can toggle this flag
+    if (userId !== 7) {
+      throw new Error("Unauthorized: Only Prospect user can toggle no information status");
+    }
+
+    // Get current value
+    const [rows] = await db.execute(
+      "SELECT no_information_available FROM leads WHERE id = ? AND deleted_at IS NULL",
+      [id]
+    );
+
+    if (rows.length === 0) {
+      throw new Error("Lead not found");
+    }
+
+    const currentValue = rows[0].no_information_available;
+    const newValue = !currentValue;
+
+    // Toggle the value
+    const [result] = await db.execute(
+      "UPDATE leads SET no_information_available = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL",
+      [newValue, id]
+    );
+
+    if (result.affectedRows === 0) {
+      throw new Error("Failed to update lead");
+    }
+
+    return {
+      id,
+      no_information_available: newValue
+    };
   }
 }

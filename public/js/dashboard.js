@@ -200,6 +200,7 @@ async function fetchLeadsForStage(stageId, isInitial = false) {
       followupDate: lead.followup_date,
       notes: lead.notes,
       stage: lead.stage,
+      no_information_available: lead.no_information_available,
       createdAt: lead.created_at,
       lastUpdated: lead.updated_at,
       timeline: lead.timeline || [],
@@ -386,6 +387,7 @@ function hideStageLoader(stageId) {
 // Render individual lead card
 function renderLeadCard(lead) {
   const followupInfo = getFollowupInfo(lead.followupDate);
+  const createdInfo = getCreatedInfo(lead.createdAt);
 
   return `
           <div class="lead-card" draggable="true" ondragstart="handleDragStart(event, '${
@@ -434,6 +436,19 @@ function renderLeadCard(lead) {
                               <line x1="3" y1="10" x2="21" y2="10"/>
                           </svg>
                           ${followupInfo.text}
+                      </span>
+                  `
+                      : ""
+                  }
+                  ${
+                    lead.createdAt
+                      ? `
+                      <span class="lead-meta-item" title="Created: ${new Date(lead.createdAt).toLocaleString()}">
+                          <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+                              <circle cx="12" cy="12" r="10"/>
+                              <polyline points="12 6 12 12 16 14"/>
+                          </svg>
+                          ${createdInfo}
                       </span>
                   `
                       : ""
@@ -497,6 +512,41 @@ function getFollowupInfo(date) {
       }),
       className: "",
     };
+  }
+}
+
+// Get created info
+function getCreatedInfo(createdAt) {
+  if (!createdAt) return "";
+
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now - created;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Less than 1 hour ago
+  if (diffMins < 60) {
+    return diffMins <= 1 ? "Just now" : `${diffMins}m ago`;
+  }
+  // Less than 24 hours ago
+  else if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  // Less than 7 days ago
+  else if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+  // More than 7 days ago, show date and time
+  else {
+    return created.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }) + " " + created.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 }
 
@@ -776,6 +826,25 @@ function openModal(leadId = null) {
         }
       }
 
+      // Show/hide "No Info" button for Prospect user only
+      const noInfoBtn = document.getElementById("noInfoBtn");
+      const noInfoBtnText = document.getElementById("noInfoBtnText");
+      if (noInfoBtn && noInfoBtnText) {
+        if (isProspect) {
+          noInfoBtn.style.display = "block";
+          // Update button text based on current status
+          if (lead.no_information_available) {
+            noInfoBtnText.textContent = "Unmark No Info";
+            noInfoBtn.style.backgroundColor = "#10b981";
+          } else {
+            noInfoBtnText.textContent = "Mark as No Info";
+            noInfoBtn.style.backgroundColor = "#f59e0b";
+          }
+        } else {
+          noInfoBtn.style.display = "none";
+        }
+      }
+
       if (lead.assignedUserId) {
         const assignedUser = users.find((u) => u.id === lead.assignedUserId);
         if (assignedUser) {
@@ -803,6 +872,10 @@ function openModal(leadId = null) {
     if (submitBtnText) submitBtnText.textContent = "Add Lead";
     if (deleteBtn) deleteBtn.style.display = "none";
     if (timelineSection) timelineSection.style.display = "block";
+
+    // Hide "No Info" button in add mode
+    const noInfoBtn = document.getElementById("noInfoBtn");
+    if (noInfoBtn) noInfoBtn.style.display = "none";
 
     // Show/hide assigned user based on admin or Prospect user status
     if (assignedUserGroup) {
@@ -1278,6 +1351,69 @@ async function saveLeadAnyway() {
   if (pendingLeadData) {
     setButtonLoading('saveAnywayBtn', true, 'Saving...');
     await saveLeadDirectly(pendingLeadData);
+  }
+}
+
+// Toggle "No Information Available" status (Prospect user only)
+async function toggleNoInformation() {
+  if (!editingLeadId) {
+    alert("No lead selected");
+    return;
+  }
+
+  if (!isProspectUser()) {
+    alert("Only Prospect user can toggle no information status");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/leads/${editingLeadId}/toggle-no-info`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to toggle no information status");
+    }
+
+    const result = await response.json();
+
+    // Update the lead in the local state
+    for (const [stage, stageLeads] of Object.entries(leadsByStage)) {
+      const leadIndex = stageLeads.findIndex((l) => l.id === editingLeadId);
+      if (leadIndex !== -1) {
+        leadsByStage[stage][leadIndex].no_information_available = result.no_information_available;
+        break;
+      }
+    }
+
+    // Update button text and color
+    const noInfoBtn = document.getElementById("noInfoBtn");
+    const noInfoBtnText = document.getElementById("noInfoBtnText");
+    if (noInfoBtn && noInfoBtnText) {
+      if (result.no_information_available) {
+        noInfoBtnText.textContent = "Unmark No Info";
+        noInfoBtn.style.backgroundColor = "#10b981";
+      } else {
+        noInfoBtnText.textContent = "Mark as No Info";
+        noInfoBtn.style.backgroundColor = "#f59e0b";
+      }
+    }
+
+    // Show success message
+    alert(result.no_information_available
+      ? "Lead marked as 'No Information Available'"
+      : "Lead unmarked from 'No Information Available'");
+
+    // Refresh the pipeline to show updated data
+    await fetchLeadCounts();
+    renderPipeline();
+  } catch (error) {
+    console.error("Error toggling no information status:", error);
+    alert(error.message || "Failed to toggle no information status");
   }
 }
 

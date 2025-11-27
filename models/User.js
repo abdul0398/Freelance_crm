@@ -5,19 +5,19 @@ export default class User {
   static async getAll(role, userId) {
     console.log(role, userId);
     let query = `
-      SELECT id, name, email, role, is_active, created_at, updated_at 
-      FROM users 
-      WHERE is_active = TRUE 
+      SELECT id, name, email, role, is_active, created_at, updated_at
+      FROM users
+      WHERE is_active = TRUE
     `;
 
-    // If the user is not an admin, filter by user ID
-    if (role !== "admin") {
+    // If the user is not an admin and not Prospect user (ID 7), filter by user ID
+    if (role !== "admin" && userId !== 7) {
       query += ` AND id = ?`;
     }
 
     query += ` ORDER BY name`;
 
-    const [rows] = await db.execute(query, role !== "admin" ? [userId] : []);
+    const [rows] = await db.execute(query, (role !== "admin" && userId !== 7) ? [userId] : []);
     return rows;
   }
 

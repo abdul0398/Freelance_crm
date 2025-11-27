@@ -151,6 +151,24 @@ router.delete("/leads/:id", async (req, res) => {
   }
 });
 
+// Toggle no information available status (only for Prospect user - ID 7)
+router.patch("/leads/:id/toggle-no-info", async (req, res) => {
+  try {
+    const result = await Lead.toggleNoInformation(
+      req.params.id,
+      req.user.user_id
+    );
+    res.json(result);
+  } catch (error) {
+    console.error("Error toggling no information status:", error);
+    if (error.message.includes("Unauthorized")) {
+      res.status(403).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: "Failed to toggle no information status" });
+    }
+  }
+});
+
 // Activity routes
 router.get("/leads/:id/activities", async (req, res) => {
   try {

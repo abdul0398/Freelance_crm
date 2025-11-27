@@ -285,21 +285,26 @@
                 width: 100%;
                 justify-content: space-between;
               ">
-            <button type="button" class="btn btn-danger" id="deleteBtn" style="display: none" onclick="deleteLead()">
-              <span class="btn-text">Delete Lead</span>
-              <span class="btn-spinner" style="display: none;">
-                <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"
-                    stroke-dasharray="32" stroke-dashoffset="32">
-                    <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32"
-                      repeatCount="indefinite" />
-                    <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32"
-                      repeatCount="indefinite" />
-                  </circle>
-                </svg>
-                Deleting...
-              </span>
-            </button>
+            <div style="display: flex; gap: 12px;">
+              <button type="button" class="btn btn-danger" id="deleteBtn" style="display: none" onclick="deleteLead()">
+                <span class="btn-text">Delete Lead</span>
+                <span class="btn-spinner" style="display: none;">
+                  <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"
+                      stroke-dasharray="32" stroke-dashoffset="32">
+                      <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32"
+                        repeatCount="indefinite" />
+                      <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32"
+                        repeatCount="indefinite" />
+                    </circle>
+                  </svg>
+                  Deleting...
+                </span>
+              </button>
+              <button type="button" class="btn" id="noInfoBtn" style="display: none; background-color: #f59e0b; color: white;" onclick="toggleNoInformation()">
+                <span class="btn-text" id="noInfoBtnText">Mark as No Info</span>
+              </button>
+            </div>
             <div style="display: flex; gap: 12px; margin-left: auto">
               <button type="button" class="btn btn-secondary" onclick="closeModal()">
                 Cancel
