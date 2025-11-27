@@ -111,7 +111,7 @@ export default class Lead {
       LEFT JOIN users u ON l.assigned_user_id = u.id
       LEFT JOIN users creator ON l.created_by = creator.id
       ${whereClause}
-      ORDER BY l.updated_at DESC
+      ORDER BY l.created_at DESC
     `;
 
     // Create a copy of params for the main query to avoid modifying the original
