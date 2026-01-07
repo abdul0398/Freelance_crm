@@ -96,6 +96,7 @@ export default class Lead {
         l.contact_name,
         l.company,
         l.platform,
+        l.department,
         l.deal_value,
         l.followup_date,
         l.notes,

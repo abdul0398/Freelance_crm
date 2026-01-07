@@ -195,6 +195,7 @@ async function fetchLeadsForStage(stageId, isInitial = false) {
       contactName: lead.contact_name,
       company: lead.company,
       platform: lead.platform,
+      department: lead.department,
       dealValue: lead.deal_value,
       assignedUser: lead.assigned_user_name,
       followupDate: lead.followup_date,
@@ -412,6 +413,11 @@ function renderLeadCard(lead) {
                   <span class="platform-badge">${getPlatformIcon(
                     lead.platform
                   )} ${lead.platform}</span>
+                  ${
+                    lead.department
+                      ? `<span class="department-tag department-${lead.department}">${lead.department}</span>`
+                      : ""
+                  }
                   ${
                     lead.assignedUser
                       ? `
