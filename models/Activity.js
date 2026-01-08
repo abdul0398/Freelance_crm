@@ -3,9 +3,15 @@ export default class Activity {
   static async getByLeadId(leadId) {
     const [rows] = await db.execute(
       `
-      SELECT 
-        a.*,
-        u.name as user_name
+      SELECT
+        a.id,
+        a.lead_id,
+        a.type,
+        a.description,
+        a.activity_date as date,
+        a.user_id,
+        a.created_at,
+        u.name as user
       FROM activities a
       LEFT JOIN users u ON a.user_id = u.id
       WHERE a.lead_id = ?
@@ -20,12 +26,18 @@ export default class Activity {
   static async create(activityData) {
     const { lead_id, type, description, activity_date, user_id } = activityData;
 
+    // Convert ISO 8601 datetime to MySQL format (YYYY-MM-DD HH:MM:SS)
+    const formattedDate = new Date(activity_date)
+      .toISOString()
+      .slice(0, 19)
+      .replace('T', ' ');
+
     const [result] = await db.execute(
       `
       INSERT INTO activities (lead_id, type, description, activity_date, user_id)
       VALUES (?, ?, ?, ?, ?)
     `,
-      [lead_id, type, description, activity_date, user_id]
+      [lead_id, type, description, formattedDate, user_id]
     );
 
     // Update lead's updated_at timestamp

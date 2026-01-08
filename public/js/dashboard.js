@@ -785,8 +785,24 @@ async function handleDrop(e, stageId) {
   draggedLeadId = null;
 }
 
+// Fetch and render timeline for a lead
+async function fetchAndRenderTimeline(leadId) {
+  try {
+    const response = await fetch(`${API_BASE}/leads/${leadId}/activities`);
+    const activities = await response.json();
+
+    // Create a temporary lead object with timeline
+    const lead = { timeline: activities };
+    renderTimeline(lead);
+  } catch (error) {
+    console.error("Error fetching timeline:", error);
+    // Show empty timeline on error
+    renderTimeline({ timeline: [] });
+  }
+}
+
 // Modal functions
-function openModal(leadId = null) {
+async function openModal(leadId = null) {
   const modal = document.getElementById("leadModal");
   const modalTitle = modal.querySelector(".modal-title");
   const submitBtn = document.getElementById("submitBtn");
@@ -867,8 +883,8 @@ function openModal(leadId = null) {
       if (dateValue) document.getElementById("followupDate").value = dateValue;
       document.getElementById("notes").value = lead.notes || "";
 
-      // Render timeline
-      renderTimeline(lead);
+      // Fetch and render timeline
+      await fetchAndRenderTimeline(leadId);
     }
   } else {
     // Add mode
@@ -882,6 +898,9 @@ function openModal(leadId = null) {
     // Hide "No Info" button in add mode
     const noInfoBtn = document.getElementById("noInfoBtn");
     if (noInfoBtn) noInfoBtn.style.display = "none";
+
+    // Clear timeline in add mode
+    renderTimeline({ timeline: [] });
 
     // Show/hide assigned user based on admin or Prospect user status
     if (assignedUserGroup) {
@@ -1120,11 +1139,23 @@ async function saveLeadDirectly(apiData) {
       : `${API_BASE}/leads`;
     const method = editingLeadId ? "PUT" : "POST";
 
-    await fetch(url, {
+    const response = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(apiData),
     });
+
+    const result = await response.json();
+
+    // Add initial activity for new leads
+    if (!editingLeadId && result.id) {
+      await addInitialActivity(result.id);
+    }
+
+    // Add update activity for edited leads
+    if (editingLeadId) {
+      await addUpdateActivity(editingLeadId);
+    }
 
     await refreshAfterChange();
     closeModal();
@@ -1202,6 +1233,9 @@ async function saveActivity(leadId, activityData) {
       body: JSON.stringify(apiData),
     });
 
+    // Refresh the timeline to show the new activity
+    await fetchAndRenderTimeline(leadId);
+
     await refreshAfterChange();
   } catch (error) {
     console.error("Error saving activity:", error);
@@ -1215,6 +1249,21 @@ async function addInitialActivity(leadId) {
   const apiData = {
     type: "note",
     description: "Lead created",
+    activity_date: new Date().toISOString(),
+    user_id: currentUser?.id || null,
+  };
+
+  await fetch(`${API_BASE}/leads/${leadId}/activities`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(apiData),
+  });
+}
+
+async function addUpdateActivity(leadId) {
+  const apiData = {
+    type: "note",
+    description: "Lead updated",
     activity_date: new Date().toISOString(),
     user_id: currentUser?.id || null,
   };
